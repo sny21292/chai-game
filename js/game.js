@@ -27,7 +27,7 @@ function audioInit() {
   try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; }
 }
 function beep(freq, dur, type = 'square', vol = 0.05, slide = 0) {
-  if (!actx || !save.sfx || Ads.showing) return;
+  if (!actx || !save.sfx || Ads.showing || Portal.muted) return;
   const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
   o.type = type;
   o.frequency.setValueAtTime(freq, t);
@@ -98,7 +98,7 @@ function homeWorld() {
 function markDone(i) {
   const lv = LEVELS[i], w = WORLDS[lv.world], before = { states: statesDone(), complete: complete(lv.world) };
   save.done[w.id] = Math.max(save.done[w.id] || 0, lv.num + 1);
-  if (w.reward && complete(lv.world) && !save.skins.includes(w.reward)) { save.skins.push(w.reward); save.skin = w.reward; G.newSkin = w.reward; }
+  if (w.reward && complete(lv.world) && !save.skins.includes(w.reward)) { save.skins.push(w.reward); save.skin = w.reward; G.newSkin = w.reward; Portal.happy(); }
   persist();
   return before;
 }
@@ -890,7 +890,7 @@ function drawAd() {
   ctx.fillStyle = 'rgba(10,6,14,.92)'; ctx.fillRect(0, 0, W, H);
   if (Ads.showing) {
     text(Ads.showing.type === 'rewarded' ? '📺 ad chal raha hai... phir level skip' : '📺 chhota sa break', W / 2, H / 2 - 10, 26, '#ffcf6b');
-    text(`(${Ads.provider ? Ads.provider.name : ''} ad — the real one comes from the ad network)`, W / 2, H / 2 + 30, 13, DIM, 'center', 600);
+    if (Ads.provider === MockAds) text('(mock ad — the real one comes from the ad network)', W / 2, H / 2 + 30, 13, DIM, 'center', 600);
   } else text('ek second...', W / 2, H / 2, 22, CREAM);
 }
 
@@ -1050,7 +1050,8 @@ function boot() {
     touch.classList.toggle('playing', (G.state === 'play' || G.state === 'dead' || G.state === 'win') && !G.paused && !G.settings);
     const m = G.map, onMap = G.state === 'map' && m;
     const wi = onMap ? (m.zoom != null ? m.zoom : Math.max(0, regionWorld(m.sel))) : G.L && G.state !== 'title' ? G.L.def.world : homeWorld();
-    Music.update(actx, save.music && !Ads.showing && !document.hidden, WORLDS[wi].theme);
+    Music.update(actx, save.music && !Portal.muted && !Ads.showing && !document.hidden, WORLDS[wi].theme);
+    Portal.gameplay((G.state === 'play' || G.state === 'dead') && !G.paused && !G.settings && !Ads.showing);
     draw();
     requestAnimationFrame(loop);
   };

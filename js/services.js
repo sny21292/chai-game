@@ -58,6 +58,7 @@ const Ads = {
   provider: null, showing: null, busy: false, levelsSinceBreak: 0, lastBreakAt: 0,
   init() {
     this.provider = (hasWindow && window.FIL_ADS_PROVIDER) || (query.get('ads') === 'mock' ? MockAds : null);
+    if (!this.provider && Portal.wanted()) Portal.init();     // sets provider once the portal SDK is ready
   },
   get available() { return !!this.provider && !this.busy; },
   levelCleared() { this.levelsSinceBreak++; },
@@ -68,18 +69,18 @@ const Ads = {
   },
   async rewarded(placement) {
     if (!this.available) return false;
-    this.busy = true;
+    this.busy = true; this.showing = { type: 'rewarded' };    // game paused + muted while any ad is up
     let ok = false;
     try { ok = !!(await this.provider.rewarded(placement)); } catch (e) { ok = false; }
-    this.busy = false;
+    this.busy = false; this.showing = null;
     Stats.track(ok ? 'ad_reward' : 'ad_no_reward', { placement });
     return ok;
   },
   async interstitial(placement) {
     if (!this.available) return;
-    this.busy = true;
+    this.busy = true; this.showing = { type: 'interstitial' };
     try { await this.provider.interstitial(placement); } catch (e) {}
-    this.busy = false;
+    this.busy = false; this.showing = null;
     this.levelsSinceBreak = 0;
     this.lastBreakAt = Date.now();
     Stats.track('ad_break', { placement });
@@ -95,6 +96,57 @@ const MockAds = {
   },
   rewarded() { return this.show('rewarded', true); },
   interstitial() { return this.show('interstitial'); },
+};
+
+// ---------- web portal: CrazyGames SDK v3 ----------
+// Loaded only when the game runs on a CrazyGames domain, or with ?portal=crazygames (add &useLocalSdk=true to
+// test the SDK's local mode). Docs: docs.crazygames.com/sdk (ads: requestAd 'midgame' | 'rewarded';
+// game: gameplayStart/Stop, happytime, settings.muteAudio). Poki would get a sibling adapter here later.
+const Portal = {
+  name: null, game: null, playing: null, muted: false,
+  wanted() {
+    return hasWindow && (query.get('portal') === 'crazygames' || /(^|\.)crazygames\./.test(location.hostname));
+  },
+  init() {
+    const s = document.createElement('script');
+    s.src = 'https://sdk.crazygames.com/crazygames-sdk-v3.js';
+    s.onload = async () => {
+      try {
+        const SDK = window.CrazyGames.SDK;
+        await SDK.init();
+        if (SDK.environment === 'disabled') return;
+        this.name = 'crazygames'; this.game = SDK.game;
+        this.muted = !!(SDK.game.settings && SDK.game.settings.muteAudio);
+        SDK.game.addSettingsChangeListener(st => { this.muted = !!st.muteAudio; });
+        if (!Ads.provider) Ads.provider = CrazyGamesAds;
+        Stats.track('portal_ready', { portal: this.name, env: SDK.environment });
+      } catch (e) { Stats.track('portal_error', { portal: 'crazygames', message: String(e && e.message) }); }
+    };
+    document.head.appendChild(s);
+  },
+  // gameplay(true) while a level is being played, false on menus, pause, level-end screens and ads
+  gameplay(on) {
+    if (!this.game || on === this.playing) return;
+    this.playing = on;
+    try { on ? this.game.gameplayStart() : this.game.gameplayStop(); } catch (e) {}
+  },
+  happy() { try { if (this.game) this.game.happytime(); } catch (e) {} },   // big moments only: a boss, the whole map
+};
+const CrazyGamesAds = {
+  name: 'crazygames',
+  request(type) {
+    return new Promise(done => {
+      try {
+        window.CrazyGames.SDK.ad.requestAd(type, {
+          adStarted: () => {},
+          adFinished: () => done(true),
+          adError: e => { Stats.track('ad_error', { type, code: e && e.code }); done(false); },   // unfilled, cooldown, adblock...
+        });
+      } catch (e) { done(false); }
+    });
+  },
+  rewarded() { return this.request('rewarded'); },
+  interstitial() { return this.request('midgame').then(() => {}); },
 };
 
 // ---------- haptics ----------
