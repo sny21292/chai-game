@@ -1,6 +1,6 @@
-# Floor Is Lying
+# Floor Pe Dhokha
 
-A desi troll platformer. Guide **Chotu**, a cutting-chai glass, across a map of India where the floor, the spikes and even the door lie to you.
+A desi troll platformer (the name means "the floor tricks you"). Guide **Chotu**, a cutting-chai glass, across a map of India where the floor, the spikes and even the door lie to you.
 
 - Play: open `index.html` in a browser (no build step, no dependencies).
 - Controls: ← → move, Space / ↑ jump, R restart, P pause, O settings. On the map: tap a state to select, tap again to enter; drag, pinch or scroll to zoom.

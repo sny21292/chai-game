@@ -12,7 +12,7 @@ const IS_DEV = hasWindow && (location.protocol === 'file:' || /^(localhost|127\.
 // Keeps per-level aggregates on this device (Settings → download stats) and forwards every event
 // to window.FIL_ANALYTICS_SINK(name, data) when a real analytics backend is plugged in.
 const Stats = {
-  KEY: 'floorIsLying.stats',
+  KEY: 'floorIsLying.stats',   // old name kept on purpose (existing stats)
   data: { sessions: 0, firstSeen: null, levels: {} },
   load() {
     try { Object.assign(this.data, JSON.parse(localStorage.getItem(this.KEY) || '{}')); } catch (e) {}

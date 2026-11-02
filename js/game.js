@@ -50,7 +50,7 @@ const sfx = {
 };
 
 // ---------- save ----------
-const SAVE_KEY = 'floorIsLying.v2';
+const SAVE_KEY = 'floorIsLying.v2';   // old name kept on purpose: renaming the key would wipe everyone's progress
 // done: levels cleared per world id, in order (e.g. { mumbai: 4 }). skins: Chotu looks you have unlocked.
 const save = { done: {}, deaths: 0, music: true, sfx: true, vibrate: true, noAds: false, skipped: [], skin: 'glass', skins: ['glass'] };
 try { if (typeof localStorage !== 'undefined') Object.assign(save, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) {}
@@ -467,7 +467,7 @@ function resetProgress() {
 function downloadStats() {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([Stats.export()], { type: 'application/json' }));
-  a.download = `floor-is-lying-stats-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `floor-pe-dhokha-stats-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
@@ -967,7 +967,7 @@ function drawTitle() {
   ctx.drawImage(background(WORLDS[wi].theme), 0, 0, W, H);
   ctx.fillStyle = 'rgba(20,12,24,.45)'; ctx.fillRect(0, 0, W, H);
   const bob = Math.sin(G.frame * 0.05) * 6;
-  text('FLOOR IS LYING', W / 2, 120 + bob, 68, '#ffcf6b');
+  text('FLOOR PE DHOKHA', W / 2, 120 + bob, 68, '#ffcf6b');
   text('Chotu ki chai. aapka bharosa. dono girenge.', W / 2, 180, 19, CREAM, 'center', 600);
   ctx.save(); ctx.translate(W / 2, 330); ctx.scale(3, 3); drawChotu(PW, PH, Math.sin(G.frame * 0.02) > 0 ? 1 : -1, true); ctx.restore();
   ctx.fillStyle = THEMES[WORLDS[wi].theme].pal.block; ctx.fillRect(W / 2 - 90, 330, 180, 14);

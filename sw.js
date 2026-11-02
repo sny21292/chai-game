@@ -1,6 +1,6 @@
 // Offline support: cache the whole game on first visit, serve from cache, refresh in the background.
 // Bump VERSION whenever you deploy so players pick up the new files.
-const VERSION = 'fil-v3';
+const VERSION = 'fil-v4';
 const FILES = [
   './', './index.html', './manifest.webmanifest',
   './js/core.js', './js/backgrounds.js', './js/services.js', './js/music.js', './js/map-data.js', './js/map.js', './js/game.js',
