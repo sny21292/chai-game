@@ -1,7 +1,7 @@
 {
   "name": "Floor Is Lying",
   "short_name": "Floor Is Lying",
-  "description": "A desi troll platformer. Guide Chotu the chai glass through 50 levels where nothing is what it seems.",
+  "description": "A desi troll platformer. Guide Chotu the chai glass across a map of India where nothing is what it seems.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "fullscreen",
