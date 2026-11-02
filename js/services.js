@@ -50,7 +50,7 @@ const Stats = {
 // With no provider the game simply shows no ads and no "skip level" offer.
 const Ads = {
   RULES: {
-    firstBreakAfterLevel: 10,      // no ad breaks during the first world: let people fall in love first
+    // no ad breaks during the first state (Maharashtra): let people fall in love first
     breakEveryLevels: 3,           // at most one break per 3 cleared levels...
     minSecondsBetweenBreaks: 120,  // ...and never more often than every 2 minutes
     offerSkipAfterDeaths: 5,       // "skip this level" (rewarded ad) appears after this many deaths on a level
@@ -61,9 +61,9 @@ const Ads = {
   },
   get available() { return !!this.provider && !this.busy; },
   levelCleared() { this.levelsSinceBreak++; },
-  wantsBreak(levelIndex, noAds) {
+  wantsBreak(pastFirstWorld, noAds) {
     const r = this.RULES;
-    return this.available && !noAds && levelIndex >= r.firstBreakAfterLevel && this.levelsSinceBreak >= r.breakEveryLevels &&
+    return this.available && !noAds && pastFirstWorld && this.levelsSinceBreak >= r.breakEveryLevels &&
       Date.now() - this.lastBreakAt >= r.minSecondsBetweenBreaks * 1000;
   },
   async rewarded(placement) {

@@ -4,7 +4,8 @@
 world({
   id: 'mumbai',
   theme: 'mumbai',
-  name: 'Mumbai Local',
+  name: 'Maharashtra',
+  region: 'MH', kind: 'state',
   tagline: 'platform pe dhakka, floor pe dhokha',
   levels: [
     {

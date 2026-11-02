@@ -4,7 +4,8 @@
 world({
   id: 'himalaya',
   theme: 'himalaya',
-  name: 'Himalaya',
+  name: 'Himachal Pradesh',
+  region: 'HP', kind: 'state',
   tagline: 'bas thoda aur upar, phir chai',
   levels: [
     {

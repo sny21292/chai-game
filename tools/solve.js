@@ -1,6 +1,7 @@
 // Proves every level can be beaten: breadth-first search over player inputs, run headless.
+// Boss levels (with rooms) are solved room by room, each from its own checkpoint, as separate jobs.
 // usage: node tools/solve.js            all levels (parallel)
-//        node tools/solve.js 3 12 41    just those level numbers (1-based)
+//        node tools/solve.js 3 12 41    just those level numbers (1-based; a boss number means all its rooms)
 //        node tools/solve.js --world delhi
 //        STEP=8 node tools/solve.js ...  coarser inputs: passing this means the level is not frame-perfect
 'use strict';
@@ -12,9 +13,9 @@ const MAX_NODES = 1500000;
 const ACTIONS = [];
 for (const dir of [1, 0, -1]) for (const jump of [1, 0]) ACTIONS.push([dir, jump]);
 
-function solveLevel(idx) {
+function solveLevel(idx, room = 0) {
   const { G, LEVELS, loadLevel, step, press } = require('./harness');
-  const def = () => LEVELS[idx];
+  const def = () => (LEVELS[idx].rooms ? LEVELS[idx].rooms[room] : LEVELS[idx]);
   const snap = () => structuredClone({ L: { ...G.L, def: null }, P: G.P, jumpBuf: G.jumpBuf, held: G.held, state: G.state });
   const restore = s => {
     const c = structuredClone(s);
@@ -39,7 +40,7 @@ function solveLevel(idx) {
     for (const h of L.hazards) if (h.active && (h.vx || h.vy || h.grav)) k.push(Math.round(h.x / 40), Math.round(h.y / 40));
     return k.join(',');
   };
-  const fresh = () => { loadLevel(idx); Object.assign(G.held, { left: false, right: false, jump: false }); };
+  const fresh = () => { loadLevel(idx, false, room); Object.assign(G.held, { left: false, right: false, jump: false }); };
   const replay = path => { fresh(); for (const a of path) act(ACTIONS[a], STEP_FRAMES); return G.state; };
 
   // a lazy player who only holds right should NOT win: that is what makes it a troll level
@@ -77,14 +78,14 @@ function solveLevel(idx) {
     for (let i = found; i > 0; i = parent[i]) path.unshift(via[i]);
     verified = replay(path) === 'win';
   }
-  return { idx, name: def().name, world: def().world, solved: found >= 0, verified, frames, nodes, naive, path };
+  return { idx, room, rooms: LEVELS[idx].rooms ? LEVELS[idx].rooms.length : 0, name: def().name, world: def().world, solved: found >= 0, verified, frames, nodes, naive, path };
 }
 
 if (process.argv[2] === '--one') {
-  const r = solveLevel(+process.argv[3] - 1);
+  const r = solveLevel(+process.argv[3] - 1, (+process.argv[4] || 1) - 1);   // --one <level> [room]
   console.log(JSON.stringify({ ...r, path: r.path && r.path.join('') }));
 } else if (process.argv[2] === '--child') {
-  process.on('message', idx => process.send(solveLevel(idx)));
+  process.on('message', ([idx, room]) => process.send(solveLevel(idx, room)));
 } else {
   const { LEVELS, WORLDS } = require('./harness');
   const args = process.argv.slice(2), wi = args.indexOf('--world');
@@ -92,25 +93,27 @@ if (process.argv[2] === '--one') {
   if (wi >= 0) queue = queue.filter(i => WORLDS[LEVELS[i].world].id === args[wi + 1]);
   else if (args.length) queue = args.map(n => +n - 1).filter(i => i >= 0 && i < LEVELS.length);
   if (!queue.length) { console.log('no matching levels'); process.exit(1); }
+  queue = queue.flatMap(i => (LEVELS[i].rooms ? LEVELS[i].rooms.map((_, r) => [i, r]) : [[i, 0]]));
   const results = [];
   let running = 0;
   const t0 = Date.now();
   const pump = () => {
     while (running < Math.max(1, os.cpus().length - 2) && queue.length) {
-      const idx = queue.shift(), child = fork(__filename, ['--child']);
+      const job = queue.shift(), child = fork(__filename, ['--child']);
       running++;
       child.on('message', r => { results.push(r); child.kill(); running--; report(r); pump(); });
-      child.send(idx);
+      child.send(job);
     }
     if (!running && !queue.length) summary();
   };
   const report = r => {
     const tag = !r.solved ? 'UNSOLVED' : !r.verified ? 'NONDETERMINISTIC' : r.naive === 'win' ? 'TOO EASY' : 'ok';
-    console.log(`${String(r.idx + 1).padStart(2)} ${(WORLDS[r.world].id + ':' + (LEVELS[r.idx].num + 1)).padEnd(13)} ${r.name.padEnd(22)} ${tag.padEnd(16)} ${r.solved ? `solved in ${(r.frames / 60).toFixed(1)}s of play` : `searched ${(r.frames / 60).toFixed(1)}s`}, ${r.nodes} states, hold-right → ${r.naive}`);
+    const where = r.rooms ? `${WORLDS[r.world].id}:boss r${r.room + 1}/${r.rooms}` : `${WORLDS[r.world].id}:${LEVELS[r.idx].num + 1}`;
+    console.log(`${String(r.idx + 1).padStart(2)} ${where.padEnd(17)} ${r.name.padEnd(22)} ${tag.padEnd(16)} ${r.solved ? `solved in ${(r.frames / 60).toFixed(1)}s of play` : `searched ${(r.frames / 60).toFixed(1)}s`}, ${r.nodes} states, hold-right → ${r.naive}`);
   };
   const summary = () => {
     const bad = results.filter(r => !r.solved || !r.verified || r.naive === 'win');
-    console.log(`\n${results.length - bad.length}/${results.length} levels ok in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+    console.log(`\n${results.length - bad.length}/${results.length} levels/rooms ok in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
     process.exit(bad.length ? 1 : 0);
   };
   pump();

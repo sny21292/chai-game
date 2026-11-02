@@ -1,7 +1,14 @@
 'use strict';
 // Engine: audio, saving, input, simulation, rendering, menus and the main loop.
 
-const LEVELS = WORLDS.flatMap((w, wi) => w.levels.map((lv, li) => Object.assign({}, lv, { world: wi, num: li })));
+// Flattened play order. A boss level has `rooms`: each room is played like a level of its own, a door leads
+// to the next room, and dying sends you back to the start of the current room (the checkpoint).
+const LEVELS = WORLDS.flatMap((w, wi) => w.levels.map((lv, li) => {
+  const L = Object.assign({}, lv, { world: wi, num: li });
+  if (lv.rooms) L.rooms = lv.rooms.map((r, ri) => Object.assign({}, r, { world: wi, num: li, room: ri }));
+  return L;
+}));
+const roomDef = (i, room) => (LEVELS[i].rooms ? LEVELS[i].rooms[room] : LEVELS[i]);
 const RED = '#ff4d5e', DOOR = '#5ee6a8', DOOR_DARK = '#2c9c6c', CREAM = '#fbeedd', DIM = '#c9b8a6', INK = '#1a1324';
 const CHAI = '#b8743a', CHAI_TOP = '#e2b277';
 const FONT = 'ui-rounded, "SF Pro Rounded", "Trebuchet MS", system-ui, sans-serif';
@@ -44,29 +51,80 @@ const sfx = {
 
 // ---------- save ----------
 const SAVE_KEY = 'floorIsLying.v2';
-const save = { level: 0, deaths: 0, music: true, sfx: true, vibrate: true, noAds: false, skipped: [] };
-try { Object.assign(save, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) {}
+// done: levels cleared per world id, in order (e.g. { mumbai: 4 }). skins: Chotu looks you have unlocked.
+const save = { done: {}, deaths: 0, music: true, sfx: true, vibrate: true, noAds: false, skipped: [], skin: 'glass', skins: ['glass'] };
+try { if (typeof localStorage !== 'undefined') Object.assign(save, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) {}
 if ('muted' in save) { if (save.muted) save.music = save.sfx = false; delete save.muted; }   // pre-settings saves
+migrateSave.happened = migrateSave(save);
 function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
+
+// Saves before the India map kept one linear index over 5 worlds of 10 (Mumbai, Delhi, Rajasthan, Kerala, Himalaya).
+// World ids never changed, so that maps straight onto per-world counts. Old Delhi progress has no equivalent
+// (Delhi is now a 5-room boss), so it is dropped; the boss still unlocks the normal way.
+function migrateSave(sv) {
+  if (!('level' in sv)) return false;
+  ['mumbai', 'delhi', 'rajasthan', 'kerala', 'himalaya'].forEach((id, k) => {
+    const n = Math.max(0, Math.min(10, sv.level - k * 10));
+    if (id !== 'delhi' && n) sv.done[id] = Math.max(sv.done[id] || 0, n);
+  });
+  delete sv.level;
+  return true;
+}
+
+// ---------- progress and unlocks ----------
+// States play in a chain (finish one to open the next). UT bosses are optional side trips that open
+// once `unlockAfter` states (default 2) are finished, and pay out a reward skin.
+const STATE_ORDER = WORLDS.map((w, wi) => wi).filter(wi => WORLDS[wi].kind !== 'ut');
+const doneIn = wi => Math.min(WORLDS[wi].levels.length, save.done[WORLDS[wi].id] || 0);
+const complete = wi => doneIn(wi) >= WORLDS[wi].levels.length;
+const statesDone = () => STATE_ORDER.filter(complete).length;
+function unlocked(wi) {
+  const w = WORLDS[wi];
+  if (w.kind === 'ut') return statesDone() >= (w.unlockAfter ?? 2);
+  const k = STATE_ORDER.indexOf(wi);
+  return k <= 0 || complete(STATE_ORDER[k - 1]);
+}
+const levelUnlocked = i => unlocked(LEVELS[i].world) && LEVELS[i].num <= doneIn(LEVELS[i].world);
+const firstLevel = wi => LEVELS.findIndex(l => l.world === wi);
+// the level to offer next in a world: the first one not yet cleared (or the last one when all are done)
+const nextIn = wi => firstLevel(wi) + Math.min(doneIn(wi), WORLDS[wi].levels.length - 1);
+// where the player is "at": the first unlocked, unfinished state; else an unfinished boss; else the first state
+function homeWorld() {
+  const st = STATE_ORDER.find(wi => unlocked(wi) && !complete(wi));
+  if (st != null) return st;
+  const any = WORLDS.findIndex((w, wi) => unlocked(wi) && !complete(wi));
+  return any >= 0 ? any : STATE_ORDER[0];
+}
+function markDone(i) {
+  const lv = LEVELS[i], w = WORLDS[lv.world], before = { states: statesDone(), complete: complete(lv.world) };
+  save.done[w.id] = Math.max(save.done[w.id] || 0, lv.num + 1);
+  if (w.reward && complete(lv.world) && !save.skins.includes(w.reward)) { save.skins.push(w.reward); save.skin = w.reward; G.newSkin = w.reward; }
+  persist();
+  return before;
+}
 
 // ---------- game state ----------
 const G = {
-  state: 'title', paused: false, L: null, P: null, idx: 0, sel: Math.min(save.level, LEVELS.length - 1),
+  state: 'title', paused: false, L: null, P: null, idx: 0, room: 0, sel: 0,
+  map: null,        // India map menu state, see js/map.js
+  newSkin: null,    // a reward skin just unlocked, shown on the next "khatam" screen
+  justDone: null,   // the world just finished (for the "khatam" screen)
   held: { left: false, right: false, jump: false }, jumpBuf: 0,
   frame: 0, shake: 0, particles: [], quip: '', deathTimer: 0, winTimer: 0,
   levelDeaths: 0, levelFrames: 0, runDeaths: 0, runStart: 0, runEnd: 0, buttons: [],
   settings: null,   // { sel, confirmReset } while the settings panel is open over any screen
 };
-const levelId = i => `${WORLDS[LEVELS[i].world].id}:${LEVELS[i].num + 1}`;
+// stable stats ids: world:n for normal levels (e.g. kerala:3), world:boss for a UT boss
+const levelId = i => `${WORLDS[LEVELS[i].world].id}:${LEVELS[i].rooms ? 'boss' : LEVELS[i].num + 1}`;
 
 // ---------- simulation ----------
 const hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 const shrink = (r, m) => ({ x: r.x + m, y: r.y + m, w: r.w - 2 * m, h: r.h - 2 * m });
 
-// respawn = reloading after a death (same attempt), otherwise a fresh visit to the level
-function loadLevel(i, respawn = false) {
-  const def = LEVELS[i];
-  if (!respawn) { G.levelDeaths = 0; G.levelFrames = 0; Stats.track('level_start', { level: levelId(i) }); }
+// respawn = reloading after a death (same attempt, same room), otherwise a fresh visit starting at `room`
+function loadLevel(i, respawn = false, room = 0) {
+  if (!respawn) { G.levelDeaths = 0; G.levelFrames = 0; G.room = room; Stats.track('level_start', { level: levelId(i) }); }
+  const def = roomDef(i, G.room);
   G.idx = i;
   const L = G.L = { def, solids: [], spikes: [], doors: [], hazards: [], winds: [], signs: [], r: {}, f: {}, t: 0, gravity: 1, reversed: false, flood: null, msg: null };
   def.build(L);
@@ -77,7 +135,7 @@ function loadLevel(i, respawn = false) {
   G.state = 'play';
 }
 
-function startAt(i) { G.runDeaths = 0; G.runStart = G.frame; loadLevel(i); }
+function startAt(i, room = 0) { G.runDeaths = 0; G.runStart = G.frame; loadLevel(i, false, room); }
 
 function die() {
   if (G.state !== 'play') return;
@@ -96,29 +154,40 @@ function die() {
   G.quip = QUIPS[Math.floor(Math.random() * QUIPS.length)];
 }
 
+const moreRooms = () => !!LEVELS[G.idx].rooms && G.room < LEVELS[G.idx].rooms.length - 1;
+
 function win() {
   G.state = 'win';
   G.winTimer = 45;
   sfx.win();
   burst(G.P.x + G.P.w / 2, G.P.y + G.P.h / 2, DOOR, 24);
   burst(G.P.x + G.P.w / 2, G.P.y + G.P.h / 2, '#ff9f1c', 14);
-  save.level = Math.max(save.level, G.idx + 1);
-  persist();
   Haptics.buzz([25, 40, 25]);
+  if (moreRooms()) { G.levelFrames += G.L.t; Stats.track('room_clear', { level: levelId(G.idx), room: G.room + 1, deaths: G.levelDeaths }); return; }
+  G.justDone = markDone(G.idx);
   Stats.track('level_win', { level: levelId(G.idx), deaths: G.levelDeaths, frames: G.levelFrames + G.L.t });
   Ads.levelCleared();
 }
 
 function nextLevel() {
-  const next = G.idx + 1;
-  if (next >= LEVELS.length) { G.state = 'end'; G.runEnd = G.frame; }
-  else if (LEVELS[next].world !== LEVELS[G.idx].world) { G.state = 'worldDone'; G.sel = next; }
-  else goToLevel(next);
+  if (moreRooms()) {        // through the door into the next room: that's the new checkpoint
+    G.room++;
+    loadLevel(G.idx, true);
+    say(G.L, `checkpoint! kamra ${G.room + 1}/${LEVELS[G.idx].rooms.length}`, 120);
+    return;
+  }
+  const wi = LEVELS[G.idx].world, next = G.idx + 1;
+  if (next < LEVELS.length && LEVELS[next].world === wi) return goToLevel(next);
+  // that was the world's last level
+  if (G.justDone && G.justDone.complete) return openMenu(wi);       // a replay of a world finished before
+  if (WORLDS.every((w, k) => complete(k))) { G.state = 'end'; G.runEnd = G.frame; return; }
+  G.state = 'worldDone';
+  G.doneWorld = wi;
 }
 
 // Enter a level, showing an ad break first when the ad rules allow one.
 function goToLevel(i) {
-  if (!Ads.wantsBreak(i, save.noAds)) return loadLevel(i);
+  if (!Ads.wantsBreak(LEVELS[i].world !== STATE_ORDER[0], save.noAds)) return loadLevel(i);
   G.state = 'adbreak';
   Ads.interstitial('between_levels').then(() => loadLevel(i));
 }
@@ -130,9 +199,11 @@ function skipLevel() {
   Ads.rewarded('skip_level').then(ok => {
     G.paused = false;
     if (!ok || G.state !== 'play') return;
-    Stats.track('level_skip', { level: levelId(G.idx), deaths: G.levelDeaths });
-    if (!save.skipped.includes(levelId(G.idx))) save.skipped.push(levelId(G.idx));
-    save.level = Math.max(save.level, G.idx + 1);
+    // on a boss, an ad skips the current room, not the whole boss
+    const id = levelId(G.idx) + (LEVELS[G.idx].rooms ? `#${G.room + 1}` : '');
+    Stats.track('level_skip', { level: levelId(G.idx), room: LEVELS[G.idx].rooms ? G.room + 1 : undefined, deaths: G.levelDeaths });
+    if (!save.skipped.includes(id)) save.skipped.push(id);
+    if (!moreRooms()) G.justDone = markDone(G.idx);
     persist();
     nextLevel();
   });
@@ -147,6 +218,7 @@ function update() {
   if (G.state === 'dead') { updateWorld(G.L); if (--G.deathTimer <= 0) loadLevel(G.idx, true); }
   else if (G.state === 'win') { updateWorld(G.L); if (--G.winTimer <= 0) nextLevel(); }
   else if (G.state === 'play') step();
+  else if (G.state === 'map') mapUpdate();
 }
 
 // One frame of play. Kept free of rendering so tools/solve.js can run it headless.
@@ -335,26 +407,18 @@ function onKey(e) {
   if (c === 'KeyM') { const on = !(save.sfx || save.music); save.sfx = save.music = on; persist(); return; }
   if (c === 'KeyO') return openSettings();
   if (G.state === 'title') { if (c === 'Enter' || c === 'Space') openMenu(); return; }
-  if (G.state === 'menu') {
-    const max = Math.min(save.level, LEVELS.length - 1);
-    const move = { ArrowLeft: -1, KeyA: -1, ArrowRight: 1, KeyD: 1, ArrowUp: -5, KeyW: -5, ArrowDown: 5, KeyS: 5 }[c];
-    if (move) { G.sel = Math.max(0, Math.min(max, G.sel + move)); sfx.click(); }
-    if (c === 'Enter' || c === 'Space') startAt(G.sel);
-    if (c === 'Escape') G.state = 'title';
-    return;
-  }
-  if (G.state === 'worldDone') { if (c === 'Enter' || c === 'Space') goToLevel(G.sel); if (c === 'Escape') openMenu(); return; }
+  if (G.state === 'map') return mapKey(c);
+  if (G.state === 'worldDone') { if (c === 'Enter' || c === 'Space') worldDoneGo(); if (c === 'Escape') openMenu(); return; }
   if (G.state === 'end') { if (c === 'Enter' || c === 'Space') openMenu(); return; }
   if (c === 'KeyP') G.paused = !G.paused;
   if (c === 'KeyR') restartLevel();
   if (c === 'KeyK') skipLevel();
   if (c === 'Escape') quitToMenu();
 }
-function openMenu() { G.state = 'menu'; G.sel = Math.min(G.sel, save.level, LEVELS.length - 1); }
 function restartLevel() { if (G.state === 'play' || G.state === 'dead') { G.paused = false; loadLevel(G.idx, true); } }
 function quitToMenu() {
   if (G.state === 'play' || G.state === 'dead') Stats.track('level_quit', { level: levelId(G.idx), deaths: G.levelDeaths });
-  G.paused = false; G.sel = G.idx; openMenu();
+  G.paused = false; G.sel = G.idx; openMenu(LEVELS[G.idx].world);
 }
 
 // ---------- settings ----------
@@ -362,8 +426,9 @@ const SETTINGS = [
   { label: 'Music', key: 'music' },
   { label: 'Sound effects', key: 'sfx' },
   { label: 'Vibration (phone)', key: 'vibrate' },
+  { label: 'Chotu', skin: true, act: () => cycleSkin() },
   { label: 'Playtest stats download karo', act: () => downloadStats() },
-  { label: 'Progress reset', act: () => resetProgress() },
+  { label: 'Progress reset', reset: true, act: () => resetProgress() },
   { label: 'Wapas', act: () => { G.settings = null; } },
 ];
 function openSettings() { G.settings = { sel: 0, confirmReset: false }; sfx.click(); }
@@ -373,7 +438,7 @@ function settingsKey(c) {
   if (c === 'ArrowUp' || c === 'KeyW') st.sel = (st.sel + SETTINGS.length - 1) % SETTINGS.length;
   if (c === 'ArrowDown' || c === 'KeyS') st.sel = (st.sel + 1) % SETTINGS.length;
   if (['Enter', 'Space', 'ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD'].includes(c)) activateSetting(st.sel);
-  if (c !== 'Enter' && c !== 'Space') st.confirmReset = st.confirmReset && st.sel === 4;
+  if (c !== 'Enter' && c !== 'Space') st.confirmReset = st.confirmReset && SETTINGS[st.sel].reset;
 }
 function activateSetting(i) {
   const row = SETTINGS[i];
@@ -382,11 +447,22 @@ function activateSetting(i) {
   else row.act();
   sfx.click();
 }
+// Chotu skins: 'glass' (default) and rewards from UT bosses (WORLDS[].reward)
+const SKINS = { glass: 'cutting glass', kulhad: 'kulhad' };
+function cycleSkin() {
+  const k = save.skins.indexOf(save.skin);
+  save.skin = save.skins[(k + 1) % save.skins.length];
+  persist();
+}
+function skinLabel() {
+  const locked = Object.keys(SKINS).filter(s => !save.skins.includes(s));
+  return `Chotu: ${SKINS[save.skin] || save.skin}` + (locked.length ? `   (${locked.map(s => SKINS[s]).join(', ')} 🔒 boss se)` : '');
+}
 function resetProgress() {
   if (!G.settings.confirmReset) { G.settings.confirmReset = true; return; }
-  Object.assign(save, { level: 0, deaths: 0, skipped: [] });
+  Object.assign(save, { done: {}, deaths: 0, skipped: [], skin: 'glass', skins: ['glass'] });
   persist();
-  G.settings = null; G.sel = 0; G.state = 'title'; G.paused = false;
+  G.settings = null; G.sel = 0; G.map = null; G.state = 'title'; G.paused = false;
 }
 function downloadStats() {
   const a = document.createElement('a');
@@ -437,7 +513,8 @@ function pill(str, x, y, size, color = CREAM, bg = 'rgba(20,12,24,.72)') {
 }
 
 // Chotu: a cutting-chai glass. Drawn with feet at (0,0), growing upward.
-function drawChotu(w, h, face, idle, fill = 0.74) {
+function drawChotu(w, h, face, idle, fill = 0.74, skin = typeof save !== 'undefined' ? save.skin : 'glass') {
+  if (skin === 'kulhad') return drawKulhad(w, h, face, idle);
   const bw = w * 0.74, lvl = -h * fill;
   const at = y => bw / 2 + (w / 2 + 1 - bw / 2) * (-y / h);      // half-width of the glass at height y
   ctx.fillStyle = 'rgba(225,242,255,.32)';
@@ -456,6 +533,32 @@ function drawChotu(w, h, face, idle, fill = 0.74) {
   ctx.beginPath(); ctx.moveTo(-w / 2 - 1, -h); ctx.lineTo(-bw / 2, 0); ctx.lineTo(bw / 2, 0); ctx.lineTo(w / 2 + 1, -h); ctx.stroke();
   ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(-w / 2 - 2, -h); ctx.lineTo(w / 2 + 2, -h); ctx.stroke();
   const ey = -h * 0.42, ex = face * 1.5, blink = G.frame % 200 < 6;
+  for (const sx of [-4.5, 4.5]) {
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(sx + ex * 0.5, ey, 3.2, blink ? 0.6 : 3.8, 0, 0, Math.PI * 2); ctx.fill();
+    if (!blink) { ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(sx + ex, ey + 0.5, 1.7, 0, Math.PI * 2); ctx.fill(); }
+  }
+  ctx.strokeStyle = INK; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.arc(ex * 0.6, ey + 6, 2.6, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+  if (idle) {
+    ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 1.5;
+    for (const k of [-4, 4]) {
+      const o = Math.sin(G.frame * 0.08 + k) * 2.5;
+      ctx.beginPath(); ctx.moveTo(k, -h - 3); ctx.quadraticCurveTo(k + 4 + o, -h - 10, k - o, -h - 17); ctx.stroke();
+    }
+  }
+}
+
+// Kulhad Chotu (reward for the Delhi boss): a matte clay cup, chai right up to the rim.
+function drawKulhad(w, h, face, idle) {
+  const bw = w * 0.66;
+  ctx.fillStyle = '#b4532a';
+  ctx.beginPath(); ctx.moveTo(-bw / 2, 0); ctx.lineTo(bw / 2, 0); ctx.quadraticCurveTo(w / 2 + 3, -h * 0.55, w / 2 + 1, -h); ctx.lineTo(-w / 2 - 1, -h); ctx.quadraticCurveTo(-w / 2 - 3, -h * 0.55, -bw / 2, 0); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#8a3b1c'; ctx.fillRect(-w / 2 - 1, -h * 0.2, w + 2, 3);             // fired band near the base
+  ctx.fillStyle = 'rgba(255,220,180,.18)'; ctx.fillRect(-w / 2 + 3, -h + 4, 3, h - 8);   // soft clay sheen
+  ctx.fillStyle = '#d98a55'; ctx.fillRect(-w / 2 - 2, -h - 1, w + 4, 3);                  // rim
+  ctx.fillStyle = CHAI_TOP; ctx.fillRect(-w / 2, -h + 2, w, 2);
+  const ey = -h * 0.5, ex = face * 1.5, blink = G.frame % 200 < 6;
   for (const sx of [-4.5, 4.5]) {
     ctx.fillStyle = '#fff';
     ctx.beginPath(); ctx.ellipse(sx + ex * 0.5, ey, 3.2, blink ? 0.6 : 3.8, 0, 0, Math.PI * 2); ctx.fill();
@@ -720,13 +823,16 @@ function drawLevel() {
   ctx.fillStyle = 'rgba(20,12,24,.78)';
   rrect(10, 10, 380, 30, 15); ctx.fill();
   rrect(W - 230, 10, 220, 30, 15); ctx.fill();
-  text(`${wd.name}  ${L.def.num + 1}/${wd.levels.length}  ·  ${L.def.name}`, 26, 26, 14, CREAM, 'left', 700);
+  const lv = LEVELS[G.idx];
+  text(lv.rooms ? `BOSS ${lv.name}  ·  kamra ${G.room + 1}/${lv.rooms.length}  ·  ${L.def.name}` : `${wd.name}  ${L.def.num + 1}/${wd.levels.length}  ·  ${L.def.name}`, 26, 26, 14, lv.rooms ? '#ffcf6b' : CREAM, 'left', 700);
   text(`yahan ☠ ${G.levelDeaths}`, W - 216, 26, 14, DIM, 'left', 700);
   text(`total ☠ ${save.deaths}`, W - 24, 26, 14, RED, 'right', 800);
 
   if (L.t < 100 && G.state === 'play') {
     ctx.globalAlpha = Math.min(1, (100 - L.t) / 30);
-    if (L.def.num === 0) { text(wd.name, W / 2, 130, 46, '#ffcf6b'); text(wd.tagline, W / 2, 175, 18, CREAM, 'center', 600); }
+    if (lv.rooms && G.room === 0) { text(`BOSS: ${lv.name}`, W / 2, 130, 46, RED); text(`${wd.name} · ${lv.rooms.length} kamre, har kamre pe checkpoint`, W / 2, 175, 18, CREAM, 'center', 600); }
+    else if (lv.rooms) text(L.def.name, W / 2, 150, 34, CREAM);
+    else if (L.def.num === 0) { text(wd.name, W / 2, 130, 46, '#ffcf6b'); text(wd.tagline, W / 2, 175, 18, CREAM, 'center', 600); }
     else text(L.def.name, W / 2, 150, 34, CREAM);
     ctx.globalAlpha = 1;
   }
@@ -760,22 +866,23 @@ function drawSettings() {
   const st = G.settings;
   ctx.fillStyle = 'rgba(20,12,24,.82)'; ctx.fillRect(0, 0, W, H);
   G.buttons = [];   // the panel is modal: nothing underneath is clickable
-  text('settings', W / 2, 70, 34, '#ffcf6b');
+  text('settings', W / 2, 52, 34, '#ffcf6b');
   SETTINGS.forEach((row, i) => {
-    const y = 110 + i * 56, on = i === st.sel;
+    const y = 86 + i * 54, on = i === st.sel;
     let label = row.label;
     if (row.key) label += save[row.key] ? '   ON' : '   OFF';
-    if (i === 4 && st.confirmReset) label = 'pakka? sab progress mit jayega. phir dabao';
+    if (row.skin) label = skinLabel();
+    if (row.reset && st.confirmReset) label = 'pakka? sab progress mit jayega. phir dabao';
     ctx.fillStyle = on ? '#ffcf6b' : 'rgba(251,238,221,.12)';
     rrect(W / 2 - 230, y, 460, 44, 22); ctx.fill();
     text(label, W / 2, y + 23, 17, on ? INK : (row.key && !save[row.key] ? DIM : CREAM), 'center', 700);
     button(W / 2 - 230, y, 460, 44, () => (st.sel === i ? activateSetting(i) : (st.sel = i)));
   });
-  text('↑ ↓ chuno  ·  ENTER badlo  ·  ESC wapas  ·  tap twice to change', W / 2, 470, 13, DIM, 'center', 600);
+  text('↑ ↓ chuno  ·  ENTER badlo  ·  ESC wapas  ·  tap twice to change', W / 2, 482, 13, DIM, 'center', 600);
   const lv = Stats.data.levels, played = Object.keys(lv).length;
   if (played) {
     const worst = Object.entries(lv).sort((a, b) => b[1].deaths - a[1].deaths)[0];
-    text(`is device pe: ${played} levels khele · sabse zyada ☠ ${worst[0]} (${worst[1].deaths})`, W / 2, 500, 12, DIM, 'center', 600);
+    text(`is device pe: ${played} levels khele · sabse zyada ☠ ${worst[0]} (${worst[1].deaths})`, W / 2, 510, 12, DIM, 'center', 600);
   }
 }
 
@@ -803,7 +910,7 @@ function overlay(title, sub) {
 function button(x, y, w, h, fn) { G.buttons.push({ x, y, w, h, fn }); }
 
 function drawTitle() {
-  const wi = LEVELS[Math.min(save.level, LEVELS.length - 1)].world;
+  const wi = homeWorld();
   ctx.drawImage(background(WORLDS[wi].theme), 0, 0, W, H);
   ctx.fillStyle = 'rgba(20,12,24,.45)'; ctx.fillRect(0, 0, W, H);
   const bob = Math.sin(G.frame * 0.05) * 6;
@@ -818,51 +925,40 @@ function drawTitle() {
   gearButton();
 }
 
-function drawMenu() {
-  const selWorld = LEVELS[G.sel].world, wd = WORLDS[selWorld];
-  ctx.drawImage(background(wd.theme), 0, 0, W, H);
-  ctx.fillStyle = 'rgba(20,12,24,.55)'; ctx.fillRect(0, 0, W, H);
-  text('kahan chalein?', W / 2, 42, 30, '#ffcf6b');
-  const cw = 172, gap = 10, x0 = (W - (cw * WORLDS.length + gap * (WORLDS.length - 1))) / 2;
-  let first = 0;
-  WORLDS.forEach((w, wi) => {
-    const x = x0 + wi * (cw + gap), locked = first > save.level, on = wi === selWorld, start = first;
-    ctx.fillStyle = on ? 'rgba(255,207,107,.22)' : 'rgba(20,12,24,.6)';
-    rrect(x, 74, cw, 62, 12); ctx.fill();
-    if (on) { ctx.strokeStyle = '#ffcf6b'; ctx.lineWidth = 2; ctx.stroke(); }
-    const done = Math.max(0, Math.min(w.levels.length, save.level - first));
-    text(locked ? '🔒 ' + w.name : w.name, x + cw / 2, 96, 16, locked ? DIM : CREAM, 'center', 800);
-    text(locked ? 'pehle pichla khatam karo' : `${done}/${w.levels.length} paar`, x + cw / 2, 120, 12, locked ? DIM : '#ffcf6b', 'center', 600);
-    if (!locked) button(x, 74, cw, 62, () => { G.sel = start; sfx.click(); });
-    first += w.levels.length;
-  });
-  const base = G.sel - LEVELS[G.sel].num, tw = 132, th = 84, gx = (W - (tw * 5 + 16 * 4)) / 2;
-  wd.levels.forEach((lv, li) => {
-    const i = base + li, x = gx + (li % 5) * (tw + 16), y = 170 + Math.floor(li / 5) * (th + 16);
-    const locked = i > save.level, done = i < save.level, on = i === G.sel;
-    ctx.fillStyle = locked ? 'rgba(20,12,24,.55)' : on ? '#ffcf6b' : 'rgba(251,238,221,.14)';
-    rrect(x, y, tw, th, 14); ctx.fill();
-    text(locked ? '🔒' : String(li + 1), x + tw / 2, y + 36, 30, on ? INK : locked ? DIM : CREAM);
-    if (done) text('✓ paar', x + tw / 2, y + 66, 12, on ? INK : DOOR, 'center', 700);
-    if (!locked) button(x, y, tw, th, () => { if (G.sel === i) startAt(i); else { G.sel = i; sfx.click(); } });
-  });
-  text(LEVELS[G.sel].name, W / 2, 392, 22, CREAM);
-  text(wd.tagline, W / 2, 422, 14, DIM, 'center', 600);
-  if (G.frame % 60 < 42) text('ENTER se khelo  ·  tap twice on a level', W / 2, 470, 16, DOOR, 'center', 700);
-  text('arrows se chuno  ·  O settings  ·  ESC wapas', W / 2, 500, 13, DIM, 'center', 600);
-  gearButton();
+// After the last level of a world: celebrate, say what just opened up, then on to the next state.
+function worldDoneNext() {
+  const k = STATE_ORDER.find(wi => unlocked(wi) && !complete(wi));
+  return k == null ? -1 : k;
 }
-
+function worldDoneGo() {
+  const nx = worldDoneNext();
+  G.newSkin = null;
+  if (nx >= 0 && WORLDS[G.doneWorld].kind !== 'ut') goToLevel(nextIn(nx)); else openMenu(nx);
+}
 function drawWorldDone() {
-  const prev = WORLDS[LEVELS[G.idx].world], next = WORLDS[LEVELS[G.sel].world];
-  ctx.drawImage(background(next.theme), 0, 0, W, H);
-  ctx.fillStyle = 'rgba(20,12,24,.6)'; ctx.fillRect(0, 0, W, H);
-  text(`${prev.name} — khatam!`, W / 2, 170, 44, DOOR);
-  text('chai break le lo. agla stop:', W / 2, 240, 18, CREAM, 'center', 600);
-  text(next.name, W / 2, 290, 40, '#ffcf6b');
-  text(next.tagline, W / 2, 335, 16, DIM, 'center', 600);
-  if (G.frame % 60 < 42) text('ENTER / tap', W / 2, 430, 20, DOOR);
-  button(0, 0, W, H, () => goToLevel(G.sel));
+  const prev = WORLDS[G.doneWorld], nx = worldDoneNext(), next = nx >= 0 ? WORLDS[nx] : null;
+  ctx.drawImage(background((next || prev).theme), 0, 0, W, H);
+  ctx.fillStyle = 'rgba(20,12,24,.62)'; ctx.fillRect(0, 0, W, H);
+  text(prev.kind === 'ut' ? `${prev.name} boss — haraya!` : `${prev.name} — khatam!`, W / 2, 130, 44, DOOR);
+  let y = 200;
+  if (G.newSkin) {
+    text(`inaam mila: ${SKINS[G.newSkin] || G.newSkin} Chotu!`, W / 2, y, 22, '#ffcf6b');
+    ctx.save(); ctx.translate(W / 2, y + 112); ctx.scale(2.2, 2.2); drawChotu(PW, PH, 1, true, 0.74, G.newSkin); ctx.restore();
+    text('settings mein badal sakte ho', W / 2, y + 134, 13, DIM, 'center', 600);
+    y += 170;
+  }
+  // a boss that just became available (only right after the state that opened it)
+  const boss = WORLDS.findIndex((w, wi) => w.kind === 'ut' && unlocked(wi) && !complete(wi));
+  if (boss >= 0 && G.justDone && G.justDone.states < (WORLDS[boss].unlockAfter ?? 2) && prev.kind !== 'ut') {
+    pill(`naya BOSS khula: ${WORLDS[boss].name} (naksha pe ★)`, W / 2, y, 16, '#ffcf6b'); y += 44;
+  }
+  if (next && prev.kind !== 'ut') {
+    text('chai break le lo. agla stop:', W / 2, y + 10, 18, CREAM, 'center', 600);
+    text(next.name, W / 2, y + 56, 40, '#ffcf6b');
+    text(next.tagline, W / 2, y + 98, 16, DIM, 'center', 600);
+  }
+  if (G.frame % 60 < 42) text(next && prev.kind !== 'ut' ? 'ENTER / tap = aage · ESC = naksha' : 'ENTER / tap = naksha', W / 2, 500, 18, DOOR);
+  button(0, 0, W, H, worldDoneGo);
 }
 
 function drawEnd() {
@@ -882,7 +978,7 @@ function drawEnd() {
 function draw() {
   G.buttons = [];
   if (G.state === 'title') drawTitle();
-  else if (G.state === 'menu') drawMenu();
+  else if (G.state === 'map') drawMap();
   else if (G.state === 'worldDone') drawWorldDone();
   else if (G.state === 'end') drawEnd();
   else drawLevel();
@@ -893,9 +989,10 @@ function draw() {
 // ---------- boot (browser only) ----------
 function boot() {
   // testing aid, local only: index.html?all unlocks every level (not saved until you beat one)
-  if (IS_DEV && query.has('all')) save.level = Math.max(save.level, LEVELS.length - 1);
+  if (IS_DEV && query.has('all')) WORLDS.forEach(w => { if (w.kind !== 'ut') save.done[w.id] = w.levels.length; });
+  if (migrateSave.happened) persist();
   Stats.load();
-  Stats.track('session_start', { level: null, unlocked: save.level });
+  Stats.track('session_start', { level: null, unlocked: Object.values(save.done).reduce((a, b) => a + b, 0) });
   Ads.init();
   if (location.protocol.startsWith('http') && 'serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   cv = document.getElementById('c');
@@ -922,12 +1019,19 @@ function boot() {
   document.addEventListener('visibilitychange', () => { if (document.hidden && G.state === 'play') { releaseAll(); G.paused = true; } });
   addEventListener('pagehide', () => { if (G.state === 'play' || G.state === 'dead') Stats.track('level_quit', { level: levelId(G.idx), deaths: G.levelDeaths }); });
 
+  const logical = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; };
   cv.addEventListener('pointerdown', e => {
     audioInit();
-    const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * H;
+    const [x, y] = logical(e);
     const b = [...G.buttons].reverse().find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
-    if (b) b.fn();
+    if (b) return b.fn();
+    try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+    mapPointer('down', e.pointerId, x, y);
   });
+  cv.addEventListener('pointermove', e => { const [x, y] = logical(e); mapPointer('move', e.pointerId, x, y); });
+  cv.addEventListener('pointerup', e => { const [x, y] = logical(e); mapPointer('up', e.pointerId, x, y); });
+  cv.addEventListener('pointercancel', e => { const [x, y] = logical(e); mapPointer('cancel', e.pointerId, x, y); });
+  cv.addEventListener('wheel', e => { if (G.state !== 'map') return; e.preventDefault(); const [x, y] = logical(e); mapWheel(x, y, e.deltaY); }, { passive: false });
   const touch = document.getElementById('touch');
   if (matchMedia('(pointer: coarse)').matches) touch.classList.add('on');
   for (const btn of touch.querySelectorAll('[data-k]')) {
@@ -944,7 +1048,8 @@ function boot() {
     last = now;
     while (acc >= STEP) { update(); acc -= STEP; }
     touch.classList.toggle('playing', (G.state === 'play' || G.state === 'dead' || G.state === 'win') && !G.paused && !G.settings);
-    const wi = G.state === 'menu' ? LEVELS[G.sel].world : G.L && G.state !== 'title' ? G.L.def.world : LEVELS[Math.min(save.level, LEVELS.length - 1)].world;
+    const m = G.map, onMap = G.state === 'map' && m;
+    const wi = onMap ? (m.zoom != null ? m.zoom : Math.max(0, regionWorld(m.sel))) : G.L && G.state !== 'title' ? G.L.def.world : homeWorld();
     Music.update(actx, save.music && !Ads.showing && !document.hidden, WORLDS[wi].theme);
     draw();
     requestAnimationFrame(loop);

@@ -8,6 +8,7 @@ world({
   id: 'rajasthan',
   theme: 'rajasthan',
   name: 'Rajasthan',
+  region: 'RJ', kind: 'state',
   tagline: 'padharo mhare des... dhyaan se',
   levels: [
     {

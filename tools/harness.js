@@ -11,4 +11,6 @@ const sandbox = { console, Math, JSON, Object, Array, Number, String, Set, Map, 
 vm.createContext(sandbox);
 vm.runInContext(src + '\n;globalThis.API = { G, LEVELS, WORLDS, loadLevel, step, press };', sandbox, { filename: 'game' });
 
+// run(code): evaluate code inside the game's scope (for flow tests: progress, rooms, map hit-tests)
+sandbox.API.run = code => vm.runInContext(code, sandbox);
 module.exports = sandbox.API;

@@ -9,6 +9,7 @@ world({
   id: 'kerala',
   theme: 'kerala',
   name: 'Kerala',
+  region: 'KL', kind: 'state',
   tagline: 'nariyal upar, paani neeche, Chotu beech mein',
   levels: [
     {
