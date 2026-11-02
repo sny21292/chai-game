@@ -72,9 +72,9 @@ function selectRegion(code) {
 }
 function lockedReason(wi) {
   const w = WORLDS[wi];
-  if (w.kind === 'ut') return `boss: pehle ${w.unlockAfter ?? 2} states khatam karo (${statesDone()}/${w.unlockAfter ?? 2})`;
+  if (w.kind === 'ut') return `Boss: finish ${w.unlockAfter ?? 2} states first (${statesDone()}/${w.unlockAfter ?? 2})`;
   const prev = WORLDS[STATE_ORDER[STATE_ORDER.indexOf(wi) - 1]];
-  return `pehle ${prev.name} khatam karo`;
+  return `Finish ${prev.name} first`;
 }
 
 // ---------- keyboard ----------
@@ -319,18 +319,18 @@ function drawIndiaPanel() {
     wrapText(w.tagline, x + 20, 184, PANEL.w - 40, 14, DIM);
     if (w.kind === 'ut') {
       const rooms = w.levels[0].rooms ? w.levels[0].rooms.length : 1;
-      text(`${rooms} kamre · har kamre pe checkpoint`, x + 20, 222, 14, CREAM, 'left', 700);
-      if (w.reward) text(save.skins.includes(w.reward) ? `inaam: ${w.reward} Chotu ✓ mil gaya` : `inaam: ${w.reward} Chotu`, x + 20, 246, 14, '#ffcf6b', 'left', 700);
+      text(`${rooms} rooms · checkpoint in every room`, x + 20, 222, 14, CREAM, 'left', 700);
+      if (w.reward) text(save.skins.includes(w.reward) ? `Reward: ${w.reward} Chotu ✓ unlocked` : `Reward: ${w.reward} Chotu`, x + 20, 246, 14, '#ffcf6b', 'left', 700);
     } else {
       ctx.fillStyle = 'rgba(251,238,221,.12)'; rrect(x + 20, 214, PANEL.w - 40, 10, 5); ctx.fill();
       if (done) { ctx.fillStyle = DOOR; rrect(x + 20, 214, (PANEL.w - 40) * done / n, 10, 5); ctx.fill(); }
-      text(`${done}/${n} paar`, x + 20, 242, 14, done >= n ? DOOR : CREAM, 'left', 700);
+      text(`${done}/${n} done`, x + 20, 242, 14, done >= n ? DOOR : CREAM, 'left', 700);
     }
     if (st === 'locked') wrapText('🔒 ' + lockedReason(wi), x + 20, 280, PANEL.w - 40, 14, DIM);
-    else panelButton(st === 'done' ? 'phir se khelo ▶' : 'andar chalo ▶', x + 20, 272, PANEL.w - 40, 40, true, () => zoomInto(wi));
+    else panelButton(st === 'done' ? 'Play again ▶' : 'Open ▶', x + 20, 272, PANEL.w - 40, 40, true, () => zoomInto(wi));
   }
   // legend
-  const lg = [[MAP_COLORS.open, 'khula'], [MAP_COLORS.done, 'khatam'], [MAP_COLORS.locked, 'band'], [MAP_COLORS.soon, 'jald aa raha hai']];
+  const lg = [[MAP_COLORS.open, 'Open'], [MAP_COLORS.done, 'Done'], [MAP_COLORS.locked, 'Locked'], [MAP_COLORS.soon, 'Coming soon']];
   let lx = x;
   for (const [c, label] of lg) {
     ctx.fillStyle = c; rrect(lx, 350, 14, 14, 4); ctx.fill();
@@ -339,15 +339,15 @@ function drawIndiaPanel() {
     lx += 20 + ctx.measureText(label).width + 16;
   }
   ctx.fillStyle = RED; ctx.beginPath(); ctx.arc(x + 7, 386, 7, 0, Math.PI * 2); ctx.fill();
-  text('UT = boss level (optional, inaam milega)', x + 20, 387, 12, DIM, 'left', 600);
-  text(`☠ ${save.deaths}  ·  states khatam ${statesDone()}/${STATE_ORDER.length}`, x, 430, 14, CREAM, 'left', 700);
-  if (G.frame % 60 < 42) text('tap = chuno · dobara tap = andar', x, 470, 14, DOOR, 'left', 700);
-  text('← → chuno · ENTER andar · ESC wapas · pinch/scroll zoom', x, 500, 12, DIM, 'left', 600);
+  text('UT = boss level (optional, with a reward)', x + 20, 387, 12, DIM, 'left', 600);
+  text(`☠ ${save.deaths}  ·  states done ${statesDone()}/${STATE_ORDER.length}`, x, 430, 14, CREAM, 'left', 700);
+  if (G.frame % 60 < 42) text('Tap to select · tap again to open', x, 470, 14, DOOR, 'left', 700);
+  text('← → choose · ENTER open · ESC back · pinch/scroll to zoom', x, 500, 12, DIM, 'left', 600);
 }
 
 function drawRegionPanel() {
   const m = G.map, wi = m.zoom, w = WORLDS[wi], x = PANEL.x, first = firstLevel(wi);
-  panelButton('← naksha', x, 16, 120, 34, false, zoomOut);
+  panelButton('← Map', x, 16, 120, 34, false, zoomOut);
   text(w.name, x, 82, w.name.length > 14 ? 24 : 30, '#ffcf6b', 'left');
   wrapText(w.tagline, x, 112, PANEL.w, 13, DIM);
   const lv0 = LEVELS[first];
@@ -357,9 +357,9 @@ function drawRegionPanel() {
     ctx.fillStyle = on ? '#ffcf6b' : 'rgba(251,238,221,.14)'; rrect(x, y, PANEL.w, 150, 18); ctx.fill();
     text('BOSS', x + 20, y + 28, 13, on ? INK : RED, 'left', 800);
     text(lv0.name, x + 20, y + 62, 28, on ? INK : CREAM, 'left');
-    text(`${lv0.rooms.length} kamre · har kamre pe checkpoint`, x + 20, y + 96, 14, on ? INK : CREAM, 'left', 700);
-    if (complete(wi)) text('✓ haraya!', x + PANEL.w - 20, y + 28, 14, on ? INK : DOOR, 'right', 800);
-    if (w.reward) text(save.skins.includes(w.reward) ? `inaam: ${w.reward} Chotu ✓` : `inaam: ${w.reward} Chotu`, x + 20, y + 124, 13, on ? INK : '#ffcf6b', 'left', 700);
+    text(`${lv0.rooms.length} rooms · checkpoint in every room`, x + 20, y + 96, 14, on ? INK : CREAM, 'left', 700);
+    if (complete(wi)) text('✓ Beaten', x + PANEL.w - 20, y + 28, 14, on ? INK : DOOR, 'right', 800);
+    if (w.reward) text(save.skins.includes(w.reward) ? `Reward: ${w.reward} Chotu ✓` : `Reward: ${w.reward} Chotu`, x + 20, y + 124, 13, on ? INK : '#ffcf6b', 'left', 700);
     button(x, y, PANEL.w, 150, () => (G.sel === first ? startAt(first) : (G.sel = first)));
   } else {
     const tw = 64, gap = (PANEL.w - tw * 5) / 4;
@@ -376,7 +376,7 @@ function drawRegionPanel() {
   }
   const lv = LEVELS[G.sel];
   if (lv && lv.world === wi && !lv.rooms) text(lv.name, x, 330, 20, CREAM, 'left');
-  panelButton('khelo ▶', x, 360, PANEL.w, 44, true, () => startAt(G.sel));
-  if (G.frame % 60 < 42) text('ENTER se khelo · tile pe dobara tap', x, 440, 14, DOOR, 'left', 700);
-  text('arrows se chuno · ESC naksha · O settings', x, 470, 12, DIM, 'left', 600);
+  panelButton('Play ▶', x, 360, PANEL.w, 44, true, () => startAt(G.sel));
+  if (G.frame % 60 < 42) text('ENTER to play · or tap a tile twice', x, 440, 14, DOOR, 'left', 700);
+  text('Arrows to choose · ESC map · O settings', x, 470, 12, DIM, 'left', 600);
 }
