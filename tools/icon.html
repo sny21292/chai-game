@@ -1,0 +1,26 @@
+<!doctype html>
+<!-- Renders the app icon from the game's own drawing code. Used by tools/make-icons.sh. ?maskable adds the safe-zone padding. -->
+<html><head><meta charset="utf-8"><style>html,body{margin:0;background:transparent}canvas{display:block}</style></head>
+<body><canvas id="icon" width="512" height="512"></canvas>
+<script src="../js/core.js"></script>
+<script src="../js/backgrounds.js"></script>
+<script src="../js/worlds/mumbai.js"></script>
+<script src="../js/services.js"></script>
+<script src="../js/music.js"></script>
+<script src="../js/game.js"></script>
+<script>
+  const maskable = location.search.includes('maskable');
+  const c = document.getElementById('icon');
+  ctx = c.getContext('2d');                       // game.js draws into the global ctx
+  const g = ctx.createLinearGradient(0, 0, 0, 512);
+  g.addColorStop(0, '#2a1838'); g.addColorStop(0.55, '#8a3a46'); g.addColorStop(1, '#e89a5a');
+  ctx.fillStyle = g;
+  if (maskable) ctx.fillRect(0, 0, 512, 512); else { rrect(0, 0, 512, 512, 112); ctx.fill(); }
+  ctx.fillStyle = '#f7c86a'; ctx.beginPath(); ctx.arc(256, 250, 150, 0, Math.PI * 2); ctx.globalAlpha = 0.35; ctx.fill(); ctx.globalAlpha = 1;
+  const s = maskable ? 7.2 : 8.4;                  // maskable: keep Chotu inside the central 80%
+  ctx.fillStyle = '#ff4d5e';
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) { const x = 256 - 3 * 44 + i * 44, y = maskable ? 440 : 470; ctx.moveTo(x, y); ctx.lineTo(x + 22, y - 40); ctx.lineTo(x + 44, y); }
+  ctx.fill();
+  ctx.save(); ctx.translate(256, maskable ? 400 : 430); ctx.scale(s, s); G.frame = 50; drawChotu(PW, PH, 1, true); ctx.restore();
+</script></body></html>

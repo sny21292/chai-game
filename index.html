@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1a1324">
+<meta name="description" content="Floor Is Lying: a desi troll platformer. Guide Chotu the chai glass through 50 levels where nothing is what it seems.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Floor Is Lying</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1a1324; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { display: block; touch-action: none; }
+  #touch { position: fixed; inset: 0; pointer-events: none; display: none; }
+  #touch.on.playing { display: block; }
+  #touch .btn { position: absolute; pointer-events: auto; width: 76px; height: 76px; border-radius: 50%;
+    background: rgba(251,238,221,.16); border: 2px solid rgba(251,238,221,.25); color: #fbeedd;
+    display: flex; align-items: center; justify-content: center; font: 28px system-ui, sans-serif;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; }
+  #touch [data-k=left]  { left: calc(16px + env(safe-area-inset-left)); bottom: calc(16px + env(safe-area-inset-bottom)); }
+  #touch [data-k=right] { left: calc(108px + env(safe-area-inset-left)); bottom: calc(16px + env(safe-area-inset-bottom)); }
+  #touch [data-k=jump]  { right: calc(16px + env(safe-area-inset-right)); bottom: calc(16px + env(safe-area-inset-bottom)); width: 92px; height: 92px; }
+  #touch [data-a=pause] { right: calc(16px + env(safe-area-inset-right)); top: calc(56px + env(safe-area-inset-top)); width: 44px; height: 44px; font-size: 18px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="touch">
+  <div class="btn" data-k="left">◀</div>
+  <div class="btn" data-k="right">▶</div>
+  <div class="btn" data-k="jump">▲</div>
+  <div class="btn" data-a="pause">❚❚</div>
+</div>
+<!-- order matters: core helpers, themes, worlds (in play order), platform services, music, then the engine -->
+<script src="js/core.js"></script>
+<script src="js/backgrounds.js"></script>
+<script src="js/worlds/mumbai.js"></script>
+<script src="js/worlds/delhi.js"></script>
+<script src="js/worlds/rajasthan.js"></script>
+<script src="js/worlds/kerala.js"></script>
+<script src="js/worlds/himalaya.js"></script>
+<script src="js/services.js"></script>
+<script src="js/music.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
