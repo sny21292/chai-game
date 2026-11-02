@@ -20,7 +20,8 @@ function world(def) { WORLDS.push(def); }
 //   crusher, landY   once dropped, falls fast and kills on contact until it lands at landY
 //   move:{dx,dy,period,phase,on}  oscillates between its start and start+(dx,dy); on:false waits for a trigger
 //   vx               constant horizontal speed (set it from a trigger to make something walk)
-//   kind             cosmetic: 'cow' | 'boat' | 'camel' | 'crate' | 'log'
+//   fog              only drawn when the player is within this many px horizontally (still solid)
+//   kind             cosmetic: 'cow' | 'boat' | 'camel' | 'crate' | 'log' | 'boulder' | 'bus'
 const block = (x, y, w, h, o = {}) => Object.assign({ x, y, w, h, vx: 0, vy: 0, falling: false, depth: 0 }, o, { ox: x, oy: y });
 
 // Spike row of n teeth with its base at y. dir 'up' (on a floor) or 'down' (hanging from a ceiling).
@@ -32,7 +33,7 @@ const spikes = (x, y, n, o = {}) => Object.assign({ x, y, w: n * SPH, dir: 'up',
 const door = (x, y, o = {}) => Object.assign({ x, y, w: 40, h: 60, tx: x, ty: y, flip: false, fake: false, evil: false, hidden: false }, o, { alpha: o.hidden ? 0 : 1 });
 
 // Anything that kills on touch. Moves by vx/vy, accelerates down by grav once active.
-//   kind: 'train' | 'auto' | 'coconut' | 'icicle' | 'snowball' | 'rock' | 'pigeon' | 'water' | 'fire' | 'box'
+//   kind: 'train' | 'auto' | 'coconut' | 'icicle' | 'snowball' | 'rock' | 'pigeon' | 'water' | 'fire' | 'balloon' | 'bus' | 'box'
 //   active:false  frozen until trigger(h)      landY  stops falling there (stays deadly)
 const hazard = (x, y, w, h, o = {}) => Object.assign({ x, y, w, h, vx: 0, vy: 0, grav: 0, active: true, kind: 'box', rot: 0 }, o);
 

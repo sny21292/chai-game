@@ -162,4 +162,99 @@ const THEMES = {
       }
     },
   },
+  up: {
+    // Varanasi at dawn: ghat steps down to the Ganga, temple spires, boats and floating diyas
+    pal: { block: '#c98e5a', top: '#efc184', shade: '#8a5a32', text: '#fff4e2' },
+    paint(c) {
+      skyGradient(c, ['#2a1d3d', '#7b3f5e', '#e2876a', '#f7c98a']);
+      c.fillStyle = '#ffe2a0'; c.beginPath(); c.arc(760, 250, 44, 0, Math.PI * 2); c.fill();
+      const r = seeded(21);
+      for (let x = -10; x < W;) {                                                      // ghat buildings and shikharas
+        const w = 70 + r() * 80, h = 90 + r() * 120, top = 330 - h;
+        c.fillStyle = r() < 0.5 ? '#6a3b45' : '#5a3240';
+        c.fillRect(x, top, w, h + 40);
+        if (r() < 0.45) {
+          c.beginPath(); c.moveTo(x + w * 0.2, top); c.quadraticCurveTo(x + w / 2, top - 90, x + w * 0.8, top); c.fill();
+          c.fillStyle = '#f2b04a'; c.fillRect(x + w / 2 - 1, top - 98, 2, 12);
+        } else {
+          c.fillStyle = '#4c2a36';
+          for (let cx = x + 12; cx < x + w - 14; cx += 26) { c.beginPath(); c.arc(cx + 7, top, 9, Math.PI, 0); c.fill(); }
+        }
+        c.fillStyle = 'rgba(255,200,120,.4)';
+        for (let wy = top + 14; wy < 320; wy += 24) for (let wx = x + 8; wx < x + w - 10; wx += 18) if (r() < 0.25) c.fillRect(wx, wy, 6, 9);
+        x += w + 4;
+      }
+      c.fillStyle = '#7a4a3c';                                                         // the ghat steps
+      for (let i = 0; i < 6; i++) c.fillRect(0, 330 + i * 7, W, 7 - (i % 2));
+      c.fillStyle = '#3b3a5c'; c.fillRect(0, 372, W, H - 372);                         // the river
+      c.fillStyle = 'rgba(255,226,160,.28)';
+      for (let i = 0; i < 12; i++) c.fillRect(700 + r() * 120, 380 + i * 6, 30 + r() * 40, 2);
+      c.fillStyle = '#21182b';                                                          // a couple of boats
+      for (const bx of [140, 470]) { c.beginPath(); c.moveTo(bx, 390); c.quadraticCurveTo(bx + 50, 404, bx + 110, 390); c.lineTo(bx + 116, 384); c.lineTo(bx - 6, 384); c.fill(); }
+    },
+    live(c, f) {
+      for (let i = 0; i < 10; i++) {                                                   // diyas drifting downstream
+        const x = (i * 113 + f * 0.25) % (W + 40) - 20, y = 392 + (i % 4) * 11;
+        c.fillStyle = '#8a4a2a'; c.fillRect(x - 4, y, 8, 3);
+        c.fillStyle = i % 2 ? '#ffd23f' : '#ff9f1c';
+        c.beginPath(); c.ellipse(x, y - 3 + Math.sin(f * 0.2 + i) * 0.6, 2, 3.5, 0, 0, Math.PI * 2); c.fill();
+      }
+    },
+  },
+  uttarakhand: {
+    // green hills, deodars, a rope bridge over a fast river
+    pal: { block: '#7d7a68', top: '#9cc46a', shade: '#4f4c40', text: '#f3f8ea' },
+    paint(c) {
+      skyGradient(c, ['#13253b', '#2f5a72', '#7fb0b8', '#d8e6d0']);
+      const r = seeded(31);
+      for (const [base, col, amp] of [[250, '#5f8a8c', 60], [310, '#3f6a5e', 50], [370, '#2d4f43', 40]]) {
+        c.fillStyle = col; c.beginPath(); c.moveTo(0, H);
+        for (let x = 0; x <= W; x += 16) c.lineTo(x, base - Math.abs(Math.sin(x * 0.006 + base)) * amp - Math.sin(x * 0.03) * 8);
+        c.lineTo(W, H); c.fill();
+      }
+      c.fillStyle = '#1c3a30';                                                          // deodars
+      for (let i = 0; i < 26; i++) {
+        const x = r() * W, b = 360 + r() * 40, h = 40 + r() * 50;
+        c.beginPath(); c.moveTo(x - h * 0.28, b); c.lineTo(x, b - h); c.lineTo(x + h * 0.28, b); c.fill();
+      }
+      c.fillStyle = '#3c7d8a'; c.fillRect(0, 392, W, H - 392);                          // the river
+      c.strokeStyle = 'rgba(30,20,20,.6)'; c.lineWidth = 2;                             // rope bridge in the distance
+      c.beginPath(); c.moveTo(560, 250); c.quadraticCurveTo(720, 300, 880, 250); c.stroke();
+      c.beginPath(); c.moveTo(560, 270); c.quadraticCurveTo(720, 312, 880, 270); c.stroke();
+      c.fillStyle = 'rgba(30,20,20,.6)'; c.fillRect(556, 240, 6, 40); c.fillRect(878, 240, 6, 40);
+    },
+    live(c, f) {
+      c.fillStyle = 'rgba(255,255,255,.08)';                                            // mist
+      for (let i = 0; i < 6; i++) {
+        const x = (i * 210 + f * (0.2 + i * 0.05)) % (W + 300) - 150;
+        c.beginPath(); c.ellipse(x, 220 + i * 30, 160, 18, 0, 0, Math.PI * 2); c.fill();
+      }
+      c.fillStyle = 'rgba(255,255,255,.3)';
+      for (let i = 0; i < 14; i++) c.fillRect((i * 83 + f * 2) % W, 400 + (i % 5) * 26, 20, 2);
+    },
+  },
+  chandigarh: {
+    // the planned city: concrete, roundabouts, the Open Hand, Sukhna lake
+    pal: { block: '#a9a497', top: '#e0d9c6', shade: '#6d695f', text: '#fbf7ec' },
+    paint(c) {
+      skyGradient(c, ['#2d3f5c', '#5f7f9e', '#b7c6c9', '#efe2c0']);
+      c.fillStyle = '#6a7d6a'; c.fillRect(0, 300, W, 120);                              // the Shivalik foothills
+      c.beginPath(); c.moveTo(0, 310);
+      for (let x = 0; x <= W; x += 20) c.lineTo(x, 300 - Math.abs(Math.sin(x * 0.01)) * 50);
+      c.lineTo(W, 320); c.fill();
+      c.fillStyle = '#8c8a83';                                                          // concrete blocks, Capitol-style
+      c.fillRect(80, 220, 260, 120); c.fillRect(60, 210, 300, 14);
+      c.beginPath(); c.moveTo(60, 210); c.quadraticCurveTo(210, 170, 360, 210); c.fill();
+      c.fillStyle = '#6d6b65';
+      for (let x = 96; x < 330; x += 28) c.fillRect(x, 240, 14, 90);
+      c.fillStyle = '#7b7972'; c.fillRect(620, 250, 200, 90);
+      for (let y = 260; y < 330; y += 16) { c.fillStyle = '#5f5d57'; c.fillRect(630, y, 180, 6); }
+      c.fillStyle = '#4b4a46';                                                          // the Open Hand on its mast
+      c.fillRect(477, 180, 6, 130);
+      c.beginPath(); c.moveTo(450, 182); c.lineTo(458, 120); c.lineTo(468, 150); c.lineTo(480, 108); c.lineTo(492, 150); c.lineTo(502, 120); c.lineTo(510, 182); c.closePath(); c.fill();
+      c.fillStyle = '#5d8fa6'; c.fillRect(0, 360, W, H - 360);                          // Sukhna lake
+      c.fillStyle = 'rgba(255,255,255,.25)';
+      for (let i = 0; i < 16; i++) c.fillRect((i * 67) % W, 372 + (i % 5) * 9, 24, 2);
+    },
+  },
 };

@@ -8,6 +8,9 @@ const MUSIC_THEMES = {
   rajasthan: { root: 110.0, bpm: 100 },  // A
   kerala: { root: 164.81, bpm: 84 },     // E
   himalaya: { root: 123.47, bpm: 74 },   // B
+  up: { root: 174.61, bpm: 80 },         // F
+  uttarakhand: { root: 155.56, bpm: 76 }, // D#
+  chandigarh: { root: 130.81, bpm: 104 }, // C
 };
 // keherwa, one bol per eighth note: dha ge na ti | na ka dhi na
 const KEHERWA = ['dha', 'ge', 'na', 'ti', 'na', 'ka', 'dhi', 'na'];

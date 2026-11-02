@@ -270,7 +270,7 @@ function drawMap() {
     ctx.strokeStyle = boss ? CREAM : '#a99cbc'; ctx.lineWidth = boss ? 2 : 1.2;
     ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     if (boss) text(st === 'locked' ? '🔒' : st === 'done' ? '✓' : '★', x, y + 1, 11, CREAM, 'center', 800);
-    if (boss && !zoomed) pill(`BOSS: ${r.name}`, x, y - 22, 11, on ? '#ffcf6b' : CREAM);
+    if (boss && on) pill(`BOSS: ${r.name}`, x, y - 24, 11, '#ffcf6b');   // only the selected one: the north is crowded
   }
   ctx.restore();
 

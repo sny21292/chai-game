@@ -448,7 +448,7 @@ function activateSetting(i) {
   sfx.click();
 }
 // Chotu skins: 'glass' (default) and rewards from UT bosses (WORLDS[].reward)
-const SKINS = { glass: 'cutting glass', kulhad: 'kulhad' };
+const SKINS = { glass: 'cutting glass', kulhad: 'kulhad', steel: 'steel tumbler' };
 function cycleSkin() {
   const k = save.skins.indexOf(save.skin);
   save.skin = save.skins[(k + 1) % save.skins.length];
@@ -515,6 +515,7 @@ function pill(str, x, y, size, color = CREAM, bg = 'rgba(20,12,24,.72)') {
 // Chotu: a cutting-chai glass. Drawn with feet at (0,0), growing upward.
 function drawChotu(w, h, face, idle, fill = 0.74, skin = typeof save !== 'undefined' ? save.skin : 'glass') {
   if (skin === 'kulhad') return drawKulhad(w, h, face, idle);
+  if (skin === 'steel') return drawSteel(w, h, face, idle);
   const bw = w * 0.74, lvl = -h * fill;
   const at = y => bw / 2 + (w / 2 + 1 - bw / 2) * (-y / h);      // half-width of the glass at height y
   ctx.fillStyle = 'rgba(225,242,255,.32)';
@@ -575,6 +576,33 @@ function drawKulhad(w, h, face, idle) {
   }
 }
 
+// Steel tumbler Chotu (reward for the Chandigarh boss): straight sides, shiny, a rolled rim.
+function drawSteel(w, h, face, idle) {
+  const bw = w * 0.82;
+  const g = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
+  g.addColorStop(0, '#8b97a3'); g.addColorStop(0.35, '#eef3f7'); g.addColorStop(0.6, '#b9c3cc'); g.addColorStop(1, '#7b8691');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.moveTo(-bw / 2, 0); ctx.lineTo(bw / 2, 0); ctx.lineTo(w / 2, -h); ctx.lineTo(-w / 2, -h); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#dfe6ec'; ctx.fillRect(-w / 2 - 1.5, -h - 1.5, w + 3, 3);         // rolled rim
+  ctx.fillStyle = 'rgba(80,90,100,.5)'; ctx.fillRect(-bw / 2, -3, bw, 3);
+  ctx.fillStyle = CHAI_TOP; ctx.fillRect(-w / 2 + 1, -h + 1.5, w - 2, 2);
+  const ey = -h * 0.5, ex = face * 1.5, blink = G.frame % 200 < 6;
+  for (const sx of [-4.5, 4.5]) {
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(sx + ex * 0.5, ey, 3.2, blink ? 0.6 : 3.8, 0, 0, Math.PI * 2); ctx.fill();
+    if (!blink) { ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(sx + ex, ey + 0.5, 1.7, 0, Math.PI * 2); ctx.fill(); }
+  }
+  ctx.strokeStyle = INK; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.arc(ex * 0.6, ey + 6, 2.6, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+  if (idle) {
+    ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 1.5;
+    for (const k of [-4, 4]) {
+      const o = Math.sin(G.frame * 0.08 + k) * 2.5;
+      ctx.beginPath(); ctx.moveTo(k, -h - 3); ctx.quadraticCurveTo(k + 4 + o, -h - 10, k - o, -h - 17); ctx.stroke();
+    }
+  }
+}
+
 function drawPlayer(L, P) {
   const sq = P.squash, w = P.w * (1 + sq * 0.6), h = P.h * (1 - sq * 0.6);
   ctx.save();
@@ -589,6 +617,7 @@ function drawPlayer(L, P) {
 
 function drawSolid(s, pal) {
   if (s.invisible && !s.revealed) return;
+  if (s.fog && Math.abs(G.P.x + G.P.w / 2 - (s.x + s.w / 2)) > s.fog) return;    // fog: only seen up close
   const jx = s.timer != null && !s.falling ? (Math.random() - 0.5) * 3 : 0;
   const x = s.x + jx, y = s.sink ? s.oy : s.y, w = s.w, h = s.h;
   if (s.invisible) {
@@ -653,6 +682,13 @@ const KIND_DRAW = {
     ctx.strokeStyle = '#6e4a26'; ctx.lineWidth = 3; ctx.strokeRect(x + 2, y + 2, w - 4, h - 4);
     ctx.beginPath(); ctx.moveTo(x + 2, y + 2); ctx.lineTo(x + w - 2, y + h - 2); ctx.stroke();
   },
+  boulder(x, y, w, h) {
+    ctx.fillStyle = '#7d7468'; rrect(x, y, w, h, Math.min(w, h) * 0.35); ctx.fill();
+    ctx.fillStyle = '#9a9184'; rrect(x + 6, y + 5, w * 0.5, h * 0.3, 8); ctx.fill();
+    ctx.strokeStyle = '#5a5248'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x + w * 0.3, y + h * 0.55); ctx.lineTo(x + w * 0.55, y + h * 0.7); ctx.lineTo(x + w * 0.7, y + h * 0.5); ctx.stroke();
+  },
+  bus(x, y, w, h, s) { HAZARD_DRAW.bus({ x, y, w, h, vx: s.vx }); },
   log(x, y, w, h) {
     ctx.fillStyle = '#7a4a2a'; rrect(x, y, w, h, h / 2); ctx.fill();
     ctx.strokeStyle = '#5a341c'; ctx.lineWidth = 1.5;
@@ -761,6 +797,23 @@ const HAZARD_DRAW = {
       ctx.fillStyle = '#ff7a1c'; ctx.beginPath(); ctx.moveTo(fx - 7, h.y + h.h); ctx.quadraticCurveTo(fx - 8, h.y + h.h * 0.4, fx + fl, h.y); ctx.quadraticCurveTo(fx + 8, h.y + h.h * 0.4, fx + 7, h.y + h.h); ctx.fill();
       ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.moveTo(fx - 3, h.y + h.h); ctx.quadraticCurveTo(fx, h.y + h.h * 0.4, fx + fl * 0.5, h.y + h.h * 0.35); ctx.quadraticCurveTo(fx + 4, h.y + h.h * 0.6, fx + 3, h.y + h.h); ctx.fill();
     }
+  },
+  balloon(h) {      // Holi water balloon: bright, never red (red means a static trap)
+    const cx = h.x + h.w / 2, cy = h.y + h.h * 0.45;
+    ctx.fillStyle = ['#ff3fa4', '#2fd06b', '#ffd23f'][h.hue || 0];
+    ctx.beginPath(); ctx.ellipse(cx, cy, h.w / 2, h.h * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.beginPath(); ctx.arc(cx - 3, cy - 4, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#fbeedd'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(cx, h.y + h.h * 0.9); ctx.lineTo(cx + 2, h.y + h.h); ctx.stroke();
+  },
+  bus(h) {          // hill bus: white with a green stripe
+    const { x, y, w } = h, hh = h.h;
+    ctx.fillStyle = '#eef0e6'; rrect(x, y, w, hh - 10, 8); ctx.fill();
+    ctx.fillStyle = '#2f8f4e'; ctx.fillRect(x, y + hh * 0.55, w, 8);
+    ctx.fillStyle = '#2a3440';
+    for (let wx = x + 10; wx < x + w - 24; wx += 26) ctx.fillRect(wx, y + 8, 18, 14);
+    ctx.fillStyle = '#1a1324';
+    for (const wx of [x + 18, x + w - 18]) { ctx.beginPath(); ctx.arc(wx, y + hh - 9, 8, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = '#ffe9a8'; ctx.fillRect(h.vx < 0 ? x : x + w - 6, y + hh * 0.4, 6, 7);
   },
   box(h) { ctx.fillStyle = RED; ctx.fillRect(h.x, h.y, h.w, h.h); },
 };

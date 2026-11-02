@@ -19,13 +19,19 @@ check('new saves untouched', run(`migrateSave({ done: { kerala: 2 } })`), false)
 
 // --- unlock chain ---
 reset();
-check('fresh: only Maharashtra open', run(`WORLDS.map((w, i) => unlocked(i))`), [true, false, false, false, false]);
+const open = () => run(`WORLDS.filter((w, i) => unlocked(i)).map(w => w.id)`);
+check('fresh: only Maharashtra open', open(), ['mumbai']);
 check('fresh: level 2 locked', run(`levelUnlocked(1)`), false);
 run(`save.done.mumbai = 10`);
-check('Maharashtra done opens Rajasthan, not Delhi', run(`WORLDS.map((w, i) => unlocked(i))`), [true, false, true, false, false]);
+check('Maharashtra done opens Rajasthan, not Delhi', open(), ['mumbai', 'rajasthan']);
 run(`save.done.rajasthan = 10`);
-check('2 states done opens Delhi + Kerala', run(`WORLDS.map((w, i) => unlocked(i))`), [true, true, true, true, false]);
+check('2 states done opens Delhi + Kerala', open(), ['mumbai', 'delhi', 'rajasthan', 'kerala']);
 check('home world is Kerala', run(`WORLDS[homeWorld()].id`), 'kerala');
+run(`save.done.kerala = 10; save.done.himalaya = 10`);
+check('Himachal done opens Uttar Pradesh (appended to the chain)', open(), ['mumbai', 'delhi', 'rajasthan', 'kerala', 'himalaya', 'up', 'chandigarh']);
+check('Chandigarh boss needs 4 states', run(`[WORLDS[${W('chandigarh')}].unlockAfter, statesDone()]`), [4, 4]);
+run(`save.done.up = 10`);
+check('UP done opens Uttarakhand', run(`unlocked(${W('uttarakhand')})`), true);
 
 // --- playing through a state's last level goes to the khatam screen ---
 reset(); run(`save.done.mumbai = 9`);
@@ -51,8 +57,14 @@ run(`for (let r = 1; r < 5; r++) { win(); for (let i = 0; i < 60; i++) update();
 check('last room door -> worldDone', run(`G.state`), 'worldDone');
 check('boss complete + kulhad unlocked + equipped', run(`[complete(${W('delhi')}), save.skins, save.skin, G.newSkin]`), [true, ['glass', 'kulhad'], 'kulhad', 'kulhad']);
 check('boss stats id', run(`levelId(${boss})`), 'delhi:boss');
+
 run(`worldDoneGo()`);
 check('after boss -> map, zoomed into the next state (Kerala)', run(`[G.state, G.map.zoom]`), ['map', W('kerala')]);
+reset(); run(`['mumbai', 'rajasthan', 'kerala', 'himalaya'].forEach(id => save.done[id] = 10)`);
+const cb = run(`LEVELS.findIndex(l => l.rooms && WORLDS[l.world].id === 'chandigarh')`);
+run(`startAt(${cb}); for (let r = 0; r < 4; r++) { win(); for (let i = 0; i < 60; i++) update(); }`);
+check('Chandigarh 4 rooms -> steel tumbler', run(`[G.state, complete(${W('chandigarh')}), save.skins.includes('steel')]`), ['worldDone', true, true]);
+reset();
 
 // --- quitting mid-level returns to the map zoomed into that world ---
 reset(); run(`startAt(3); quitToMenu();`);
@@ -73,11 +85,11 @@ run(`mapKey('Escape')`);
 check('ESC back to India', run(`G.map.zoom`), null);
 run(`G.map.cam = camHome()`);
 const tap = code => run(`(() => { const r = MAP_BY_CODE['${code}'], p = toScreen(G.map.cam, ...(r.kind === 'ut' ? r.pin : r.c)); return regionAt(p[0], p[1]); })()`);
-for (const c of ['MH', 'RJ', 'KL', 'HP', 'DL', 'GA', 'SK', 'TR', 'CH', 'PY', 'LD', 'AN', 'LA', 'JK', 'UP', 'WB'])
+for (const c of ['MH', 'RJ', 'KL', 'HP', 'DL', 'UP', 'UK', 'CH', 'GA', 'SK', 'TR', 'PY', 'LD', 'AN', 'LA', 'JK', 'MP', 'WB'])
   check(`tap on ${c} hits ${c}`, tap(c), c);
 check('tap in the sea hits nothing', run(`regionAt(MAP_AREA.x + 500, MAP_AREA.y + 500)`), null);
-run(`mapTap(...toScreen(G.map.cam, ...MAP_BY_CODE.UP.c))`);
-check('greyed state: selected, toast says jald aa raha hai', run(`[G.map.sel, G.map.zoom, /jald aa raha hai/.test(G.map.toast.text)]`), ['UP', null, true]);
+run(`mapTap(...toScreen(G.map.cam, ...MAP_BY_CODE.MP.c))`);
+check('greyed state: selected, toast says jald aa raha hai', run(`[G.map.sel, G.map.zoom, /jald aa raha hai/.test(G.map.toast.text)]`), ['MP', null, true]);
 run(`const p = toScreen(G.map.cam, ...MAP_BY_CODE.MH.c); mapTap(...p); mapTap(...p);`);
 check('double tap on Maharashtra zooms in', run(`G.map.zoom`), 0);
 
