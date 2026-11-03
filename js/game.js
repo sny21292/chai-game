@@ -1289,7 +1289,13 @@ function boot() {
   Portal.onReady = sdk => { setAutoLang(sdk.locale); if (sdk.save != null) portalSave(sdk.save); else persist(); };
   Ads.init();
   // offline cache for our own site only: portals serve their own copy and don't want a service worker
-  if (location.protocol.startsWith('http') && 'serviceWorker' in navigator && !Portal.wanted()) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if (location.protocol.startsWith('http') && 'serviceWorker' in navigator && !Portal.wanted()) {
+    // when an updated worker takes over (players coming from an old cached build), reload once to show the new game
+    const hadWorker = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadWorker && !reloaded) { reloaded = true; location.reload(); } });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
+  }
   cv = document.getElementById('c');
   ctx = cv.getContext('2d');
   const resize = () => {

@@ -1,4 +1,4 @@
-// Offline support: cache the whole game on first visit, serve from cache, refresh in the background.
+// Offline support: cache the whole game on first visit; always try the network first, fall back to the cache offline.
 // Bump VERSION whenever you deploy so players pick up the new files.
 const VERSION = 'fil-v6';
 const FILES = [
@@ -20,11 +20,9 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
-  e.respondWith(caches.match(e.request, { ignoreSearch: true }).then(hit => {
-    const fresh = fetch(e.request).then(res => {
-      if (res.ok) caches.open(VERSION).then(c => c.put(e.request, res.clone()));
-      return res;
-    }).catch(() => hit);
-    return hit || fresh;
-  }));
+  // network first, so a new deploy shows up on the next load; the cache is only the offline fallback
+  e.respondWith(fetch(e.request, { cache: 'no-cache' }).then(res => {
+    if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }
+    return res;
+  }).catch(() => caches.match(e.request, { ignoreSearch: true })));
 });
