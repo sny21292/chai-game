@@ -9,6 +9,8 @@
 
 const MAP_AREA = { x: 10, y: 10, w: 540, h: 520 };
 const PANEL = { x: 566, w: 380 };
+// small states whose name label would sit under a boss pin: move the label a little (map units)
+const LABEL_NUDGE = { PB: [-34, 14] };
 const MAP_BY_CODE = {};
 for (const r of MAP_REGIONS) MAP_BY_CODE[r.code] = r;
 const regionWorld = code => WORLDS.findIndex(w => w.region === code);
@@ -174,6 +176,7 @@ function regionAt(x, y) {
   if (best) return best;
   const [mx, my] = toMap(cam, x, y);
   for (const r of MAP_REGIONS) {
+    if (r.kind === 'ut') continue;     // UTs are picked by their pins only
     if (mx < r.box[0] || my < r.box[1] || mx > r.box[0] + r.box[2] || my > r.box[1] + r.box[3]) continue;
     let inside = false;
     for (const g of r.rings) {
@@ -237,7 +240,8 @@ function drawMap() {
   for (const r of MAP_REGIONS) {
     if (!r.rings.length) continue;
     const st = regionStatus(r.code), focus = zoomed && r.code === m.sel;
-    let fill = st === 'soon' ? MAP_COLORS.soon : MAP_COLORS[st];
+    // UTs are played from their pins; their outlines stay neutral (J&K's outline still includes Ladakh, see build-map.js)
+    let fill = st === 'soon' || r.kind === 'ut' ? MAP_COLORS.soon : MAP_COLORS[st];
     ctx.globalAlpha = zoomed && !focus ? 0.45 : 1;
     ctx.fillStyle = fill;
     ctx.fill(mapPaths[r.code], 'evenodd');
@@ -246,7 +250,7 @@ function drawMap() {
   ctx.strokeStyle = MAP_COLORS.edge; ctx.lineWidth = 1 / cam.s;
   for (const r of MAP_REGIONS) if (r.rings.length) ctx.stroke(mapPaths[r.code]);
   const sel = MAP_BY_CODE[m.sel];
-  if (sel && sel.rings.length) {
+  if (sel && sel.rings.length && sel.kind !== 'ut') {
     ctx.strokeStyle = '#ffcf6b'; ctx.lineWidth = 2.5 / cam.s;
     ctx.stroke(mapPaths[sel.code]);
   }
@@ -258,7 +262,8 @@ function drawMap() {
   for (const code of PLAYABLE) {
     const r = MAP_BY_CODE[code];
     if (r.kind === 'ut' || (zoomed && code !== m.sel)) continue;
-    const [x, y] = toScreen(cam, r.c[0], r.c[1]), st = regionStatus(code);
+    const nudge = LABEL_NUDGE[code] || [0, 0];
+    const [x, y] = toScreen(cam, r.c[0] + nudge[0], r.c[1] + nudge[1]), st = regionStatus(code);
     pill((st === 'locked' ? '🔒 ' : st === 'done' ? '✓ ' : '') + WORLDS[regionWorld(code)].name, x, y, zoomed ? 15 : 13, code === m.sel ? '#ffcf6b' : CREAM);
   }
   for (const r of MAP_REGIONS) {

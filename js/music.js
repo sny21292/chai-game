@@ -11,6 +11,12 @@ const MUSIC_THEMES = {
   up: { root: 174.61, bpm: 80 },         // F
   uttarakhand: { root: 155.56, bpm: 76 }, // D#
   chandigarh: { root: 130.81, bpm: 104 }, // C
+  goa: { root: 196.0, bpm: 92 },          // G
+  gujarat: { root: 185.0, bpm: 108 },     // F#, garba tempo
+  punjab: { root: 116.54, bpm: 112 },     // A#, bhangra tempo
+  andaman: { root: 207.65, bpm: 86 },     // G#
+  kashmir: { root: 103.83, bpm: 72 },     // G#, low and slow
+  ladakh: { root: 98.0, bpm: 70 },        // G
 };
 // keherwa, one bol per eighth note: dha ge na ti | na ka dhi na
 const KEHERWA = ['dha', 'ge', 'na', 'ti', 'na', 'ka', 'dhi', 'na'];

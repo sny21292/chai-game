@@ -21,6 +21,8 @@ function world(def) { WORLDS.push(def); }
 //   move:{dx,dy,period,phase,on}  oscillates between its start and start+(dx,dy); on:false waits for a trigger
 //   vx               constant horizontal speed (set it from a trigger to make something walk)
 //   fog              only drawn when the player is within this many px horizontally (still solid)
+//   bounce           springy: landing on it launches you up at this speed (full bounce, no short hop)
+//   dim              drawn faded (pair with ghost for tiles that switch on and off)
 //   kind             cosmetic: 'cow' | 'boat' | 'camel' | 'crate' | 'log' | 'boulder' | 'bus'
 const block = (x, y, w, h, o = {}) => Object.assign({ x, y, w, h, vx: 0, vy: 0, falling: false, depth: 0 }, o, { ox: x, oy: y });
 
@@ -46,3 +48,9 @@ function drop(s, vy = 0) { s.falling = true; s.vy = vy; sfx.trap(); }
 function pop(sp) { if (sp.hidden) { sp.hidden = false; sfx.trap(); } }
 function trigger(h) { if (!h.active) { h.active = true; sfx.trap(); } }
 function say(L, text, t = 110) { L.msg = { text, t }; }
+// a walker (crab, yak...) paces between two x limits; its direction lives in L.f[key] so the solver sees it
+function crabWalk(L, c, lo, hi, key = 'd', speed = 1.6) {
+  if (c.x <= lo) L.f[key] = 1;
+  if (c.x >= hi) L.f[key] = -1;
+  c.vx = speed * (L.f[key] || 1);
+}

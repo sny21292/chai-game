@@ -31,7 +31,7 @@ function solveLevel(idx, room = 0) {
   };
   const key = () => {
     const { L, P } = G;
-    const k = [Math.round(P.x / 10), Math.round(P.y / 10), Math.round(P.vy / 4), Math.sign(Math.round(P.vx / 2)), G.held.jump ? 1 : 0, P.onGround ? 1 : 0, L.gravity, L.reversed ? 1 : 0, JSON.stringify(L.f), L.solids.length, L.hazards.length, L.spikes.length];
+    const k = [Math.round(P.x / 10), Math.round(P.y / 10), Math.round(P.vy / 4), Math.sign(Math.round(P.vx / 2)), G.held.jump ? 1 : 0, P.onGround ? 1 : 0, P.boing ? 1 : 0, L.gravity, L.reversed ? 1 : 0, JSON.stringify(L.f), L.solids.length, L.hazards.length, L.spikes.length];
     for (const s of L.solids) {
       if (s.falling && s.landY == null) k.push('F');               // on its way off-screen: position no longer matters
       else if (s.move || s.falling || s.vx || s.crumble || s.sink || s.x !== s.ox || s.y !== s.oy) k.push(Math.round(s.x / 12), Math.round(s.y / 12), s.timer != null ? 1 : 0, Math.round(s.depth / 6));

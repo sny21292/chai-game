@@ -257,4 +257,170 @@ const THEMES = {
       for (let i = 0; i < 16; i++) c.fillRect((i * 67) % W, 372 + (i % 5) * 9, 24, 2);
     },
   },
+
+  goa: {
+    // sunset over the Arabian Sea: palms, a beach shack, a whitewashed chapel on the headland
+    pal: { block: '#e3c48a', top: '#f6e2b0', shade: '#b0905a', text: '#fff6e6' },
+    paint(c) {
+      skyGradient(c, ['#2a1a46', '#8a3a6a', '#f07a5a', '#ffc46b']);
+      c.fillStyle = '#ffdd8a'; c.beginPath(); c.arc(560, 318, 54, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#3b5f86'; c.fillRect(0, 320, W, H - 320);                         // the sea
+      c.fillStyle = 'rgba(255,221,138,.35)';
+      for (let i = 0; i < 16; i++) c.fillRect(500 + ((i * 37) % 120), 330 + i * 5, 30 + (i % 3) * 14, 2);
+      c.fillStyle = '#2e2433';                                                         // headland and chapel
+      c.beginPath(); c.moveTo(0, 330); c.quadraticCurveTo(120, 260, 260, 300); c.lineTo(300, 330); c.fill();
+      c.fillStyle = '#f2ece0'; c.fillRect(120, 236, 46, 40);
+      c.beginPath(); c.moveTo(116, 238); c.lineTo(143, 214); c.lineTo(170, 238); c.fill();
+      c.fillRect(140, 198, 6, 18); c.fillRect(134, 204, 18, 5);
+      c.fillStyle = '#6b4a3a'; c.fillRect(137, 254, 12, 22);
+      c.fillStyle = '#e8c98e'; c.fillRect(0, 360, W, H - 360);                          // sand
+      c.fillStyle = '#5a3a28';                                                          // beach shack
+      c.fillRect(760, 300, 150, 70);
+      c.fillStyle = '#c0392b'; c.beginPath(); c.moveTo(744, 302); c.lineTo(835, 266); c.lineTo(926, 302); c.fill();
+      c.fillStyle = '#ffd23f'; for (let x = 770; x < 900; x += 22) c.fillRect(x, 304, 10, 6);
+      palm(c, 40, 380, 150, 30, '#1f2a24'); palm(c, 680, 380, 170, -30, '#1f2a24'); palm(c, 930, 390, 130, -20, '#1f2a24');
+    },
+    live(c, f) {
+      c.strokeStyle = 'rgba(255,255,255,.35)'; c.lineWidth = 2;                        // little waves on the shore
+      for (let i = 0; i < 3; i++) {
+        const y = 352 + Math.sin(f * 0.03 + i) * 4;
+        c.beginPath(); for (let x = 0; x <= W; x += 24) c.lineTo(x, y + i * 3 + Math.sin(x * 0.05 + f * 0.05 + i) * 2); c.stroke();
+      }
+    },
+  },
+  gujarat: {
+    // Uttarayan over old Ahmedabad: pol houses, a stepwell arch, kites everywhere
+    pal: { block: '#d9b28a', top: '#f3d3a8', shade: '#9a7352', text: '#fff6ea' },
+    paint(c) {
+      skyGradient(c, ['#1f4f86', '#4f8fc0', '#9fd0e6', '#f4e3b8']);
+      const r = seeded(41);
+      for (let x = 0; x < W;) {                                                        // pol houses with carved balconies
+        const w = 70 + r() * 60, h = 120 + r() * 90;
+        c.fillStyle = ['#c98a5a', '#b9764e', '#d7a06a', '#a8674a'][Math.floor(r() * 4)];
+        c.fillRect(x, 420 - h, w, h);
+        c.fillStyle = 'rgba(60,30,20,.35)';
+        for (let y = 440 - h; y < 400; y += 34) c.fillRect(x + 8, y, w - 16, 16);
+        c.fillStyle = '#7a4a2a'; c.fillRect(x - 2, 420 - h - 6, w + 4, 8);
+        x += w + 4;
+      }
+      for (let i = 0; i < 9; i++) {                                                    // kites
+        const kx = 40 + r() * 880, ky = 40 + r() * 170, cols = ['#ff3fa4', '#ffd23f', '#2fd06b', '#ff7a1c', '#7b3fa0'];
+        c.fillStyle = cols[i % 5];
+        c.beginPath(); c.moveTo(kx, ky - 14); c.lineTo(kx + 11, ky); c.lineTo(kx, ky + 14); c.lineTo(kx - 11, ky); c.fill();
+        c.strokeStyle = 'rgba(40,40,60,.35)'; c.lineWidth = 1;
+        c.beginPath(); c.moveTo(kx, ky + 14); c.quadraticCurveTo(kx + 30, ky + 120, kx - 20 + r() * 80, 420); c.stroke();
+      }
+    },
+    live(c, f) {
+      c.fillStyle = '#ffd23f';
+      for (let i = 0; i < 3; i++) {
+        const kx = (i * 330 + f * 0.6) % (W + 60) - 30, ky = 90 + i * 40 + Math.sin(f * 0.04 + i) * 14;
+        c.beginPath(); c.moveTo(kx, ky - 10); c.lineTo(kx + 8, ky); c.lineTo(kx, ky + 10); c.lineTo(kx - 8, ky); c.fill();
+      }
+    },
+  },
+  punjab: {
+    // golden wheat and yellow mustard to the horizon, a tube-well hut, a big evening sky
+    pal: { block: '#9a6b42', top: '#7fb04a', shade: '#6a4528', text: '#fffbea' },
+    paint(c) {
+      skyGradient(c, ['#28305e', '#5c6fa6', '#e4a96a', '#f8d98a']);
+      c.fillStyle = '#ffe8a0'; c.beginPath(); c.arc(220, 300, 60, 0, Math.PI * 2); c.fill();
+      for (const [y, col] of [[320, '#c8a94a'], [350, '#e4c84a'], [385, '#f2d22e'], [415, '#d9a63a']]) {   // field bands
+        c.fillStyle = col; c.beginPath(); c.moveTo(0, H);
+        for (let x = 0; x <= W; x += 30) c.lineTo(x, y + Math.sin(x * 0.008 + y) * 6);
+        c.lineTo(W, H); c.fill();
+      }
+      c.fillStyle = '#7a5a3a'; c.fillRect(700, 280, 70, 50);                           // tube-well hut
+      c.fillStyle = '#5a3a28'; c.beginPath(); c.moveTo(690, 282); c.lineTo(735, 260); c.lineTo(780, 282); c.fill();
+      c.fillStyle = '#3a5a3a';                                                          // kikar trees
+      for (const [x, y] of [[90, 330], [520, 320], [880, 328]]) {
+        c.fillRect(x - 2, y - 40, 4, 40);
+        c.beginPath(); c.ellipse(x, y - 46, 34, 14, 0, 0, Math.PI * 2); c.fill();
+      }
+    },
+    live(c, f) {
+      c.fillStyle = 'rgba(30,30,40,.55)';                                              // birds heading home
+      for (let i = 0; i < 5; i++) {
+        const x = (i * 140 + f * 0.8) % (W + 100) - 50, y = 120 + (i % 3) * 22, w = Math.sin(f * 0.2 + i) * 4;
+        c.fillRect(x - 6, y + w, 6, 2); c.fillRect(x, y - w, 6, 2);
+      }
+    },
+  },
+  andaman: {
+    // turquoise water, green islands, a lighthouse on the point
+    pal: { block: '#d7c08e', top: '#f4e6bc', shade: '#9c845a', text: '#f4fffb' },
+    paint(c) {
+      skyGradient(c, ['#2a6fb0', '#56a9d8', '#a6e0ec', '#e8f7f2']);
+      c.fillStyle = '#1fa3a3'; c.fillRect(0, 300, W, H - 300);
+      c.fillStyle = '#35c6b8'; c.fillRect(0, 360, W, H - 360);
+      for (const [x, w, h] of [[80, 220, 60], [430, 160, 40], [720, 260, 70]]) {        // islands
+        c.fillStyle = '#2f7a4a'; c.beginPath(); c.ellipse(x + w / 2, 304, w / 2, h, 0, Math.PI, 0); c.fill();
+      }
+      c.fillStyle = '#f2ece0'; c.fillRect(806, 150, 22, 90);                           // lighthouse
+      c.fillStyle = '#c0392b'; for (let y = 160; y < 240; y += 24) c.fillRect(806, y, 22, 10);
+      c.fillStyle = '#2a3440'; c.fillRect(802, 140, 30, 12);
+      c.fillStyle = '#ffe88a'; c.fillRect(808, 128, 18, 12);
+      c.fillStyle = 'rgba(255,255,255,.35)';
+      for (let i = 0; i < 18; i++) c.fillRect((i * 71) % W, 320 + (i % 6) * 12, 26, 2);
+    },
+    live(c, f) {
+      c.fillStyle = 'rgba(255,240,170,.18)';                                           // the lighthouse beam
+      const a = Math.sin(f * 0.02) * 0.8;
+      c.beginPath(); c.moveTo(817, 134); c.lineTo(817 - 400, 134 + Math.tan(a) * 400 - 40); c.lineTo(817 - 400, 134 + Math.tan(a) * 400 + 40); c.fill();
+    },
+  },
+  kashmir: {
+    // Dal Lake: snow peaks, chinar trees in autumn, houseboats on still water
+    pal: { block: '#8a7a6a', top: '#e8eef2', shade: '#5a4e44', text: '#f6fbff' },
+    paint(c) {
+      skyGradient(c, ['#1e3a5f', '#3f6f9a', '#9cc2d8', '#e6eef0']);
+      c.fillStyle = '#5d7088';                                                          // mountains with snow caps
+      c.beginPath(); c.moveTo(0, 300);
+      for (const [x, y] of [[90, 170], [200, 240], [330, 130], [470, 230], [610, 150], [760, 220], [880, 160], [960, 210]]) c.lineTo(x, y);
+      c.lineTo(960, 320); c.lineTo(0, 320); c.fill();
+      c.fillStyle = '#f4f8fb';
+      for (const [x, y] of [[90, 170], [330, 130], [610, 150], [880, 160]]) { c.beginPath(); c.moveTo(x - 28, y + 30); c.lineTo(x, y); c.lineTo(x + 28, y + 30); c.fill(); }
+      c.fillStyle = '#6f9ab0'; c.fillRect(0, 320, W, H - 320);                          // the lake
+      c.fillStyle = 'rgba(255,255,255,.18)'; for (let i = 0; i < 12; i++) c.fillRect((i * 83) % W, 330 + (i % 4) * 14, 40, 2);
+      for (const x of [120, 520, 780]) {                                                // houseboats
+        c.fillStyle = '#7a4a2a'; c.fillRect(x, 300, 120, 24);
+        c.fillStyle = '#c9a26a'; c.fillRect(x + 6, 286, 108, 14);
+        c.fillStyle = '#5a3a20'; c.beginPath(); c.moveTo(x, 288); c.lineTo(x + 60, 270); c.lineTo(x + 120, 288); c.fill();
+      }
+      for (const [x, y] of [[40, 300], [360, 296], [690, 300], [930, 296]]) {           // chinar trees
+        c.fillStyle = '#4a3020'; c.fillRect(x - 3, y - 40, 6, 40);
+        c.fillStyle = '#d4602a'; c.beginPath(); c.arc(x, y - 56, 26, 0, Math.PI * 2); c.fill();
+        c.fillStyle = '#e8892b'; c.beginPath(); c.arc(x - 12, y - 48, 16, 0, Math.PI * 2); c.fill();
+      }
+    },
+    live(c, f) {
+      c.fillStyle = '#e8892b';                                                          // drifting leaves
+      for (let i = 0; i < 7; i++) {
+        const x = (i * 150 + Math.sin(f * 0.02 + i) * 30 + f * 0.3) % W, y = (i * 90 + f * 0.6) % 420;
+        c.beginPath(); c.ellipse(x, y, 5, 3, f * 0.03 + i, 0, Math.PI * 2); c.fill();
+      }
+    },
+  },
+  ladakh: {
+    // high desert: bare brown mountains, deep blue sky, a white stupa and prayer flags
+    pal: { block: '#a08466', top: '#cdb08a', shade: '#6e5640', text: '#fdf7ee' },
+    paint(c) {
+      skyGradient(c, ['#0f2a6a', '#2459b0', '#6fa3e0', '#cfe0ef']);
+      for (const [base, col, amp] of [[220, '#b7a48c', 90], [300, '#9a7f62', 70], [380, '#7c6249', 40]]) {
+        c.fillStyle = col; c.beginPath(); c.moveTo(0, H);
+        for (let x = 0; x <= W; x += 20) c.lineTo(x, base - Math.abs(Math.sin(x * 0.007 + base)) * amp);
+        c.lineTo(W, H); c.fill();
+      }
+      c.fillStyle = '#f4f2ec';                                                          // stupa
+      c.fillRect(640, 300, 60, 16); c.beginPath(); c.arc(670, 300, 24, Math.PI, 0); c.fill();
+      c.fillRect(666, 252, 8, 26); c.fillStyle = '#d4a23a'; c.fillRect(664, 246, 12, 8);
+      c.strokeStyle = 'rgba(40,30,20,.5)'; c.lineWidth = 1;                             // prayer flags
+      c.beginPath(); c.moveTo(300, 200); c.quadraticCurveTo(470, 250, 640, 280); c.stroke();
+      const cols = ['#2f6fd0', '#f4f4f4', '#d9473a', '#2fae5a', '#f2c230'];
+      for (let i = 0; i < 18; i++) {
+        const t = i / 18, x = 300 + t * 340, y = 200 + t * 80 + Math.sin(t * Math.PI) * 18;
+        c.fillStyle = cols[i % 5]; c.fillRect(x, y, 10, 13);
+      }
+    },
+  },
 };

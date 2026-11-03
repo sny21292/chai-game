@@ -32,6 +32,16 @@ check('Himachal done opens Uttar Pradesh (appended to the chain)', open(), ['mum
 check('Chandigarh boss needs 4 states', run(`[WORLDS[${W('chandigarh')}].unlockAfter, statesDone()]`), [4, 4]);
 run(`save.done.up = 10`);
 check('UP done opens Uttarakhand', run(`unlocked(${W('uttarakhand')})`), true);
+check('5 states done opens the Andaman boss', run(`unlocked(${W('andaman')})`), true);
+check('J&K boss still locked at 5 states', run(`unlocked(${W('kashmir')})`), false);
+run(`save.done.uttarakhand = 8`);
+check('Uttarakhand done opens Goa', run(`unlocked(${W('goa')})`), true);
+run(`save.done.goa = 8`);
+check('7 states: Gujarat and the J&K boss open, Ladakh not yet', run(`[unlocked(${W('gujarat')}), unlocked(${W('kashmir')}), unlocked(${W('ladakh')})]`), [true, true, false]);
+run(`save.done.gujarat = 8`);
+check('Gujarat done opens Punjab', run(`unlocked(${W('punjab')})`), true);
+run(`save.done.punjab = 8`);
+check('all 9 states open Ladakh', run(`[statesDone(), unlocked(${W('ladakh')})]`), [9, true]);
 
 // --- playing through a state's last level goes to the khatam screen ---
 reset(); run(`save.done.mumbai = 9`);
@@ -64,6 +74,12 @@ reset(); run(`['mumbai', 'rajasthan', 'kerala', 'himalaya'].forEach(id => save.d
 const cb = run(`LEVELS.findIndex(l => l.rooms && WORLDS[l.world].id === 'chandigarh')`);
 run(`startAt(${cb}); for (let r = 0; r < 4; r++) { win(); for (let i = 0; i < 60; i++) update(); }`);
 check('Chandigarh 4 rooms -> steel tumbler', run(`[G.state, complete(${W('chandigarh')}), save.skins.includes('steel')]`), ['worldDone', true, true]);
+for (const [id, skin] of [['andaman', 'nariyal'], ['kashmir', 'kahwa'], ['ladakh', 'gurgur']]) {
+  reset(); run(`STATE_ORDER.forEach(wi => save.done[WORLDS[wi].id] = WORLDS[wi].levels.length)`);
+  const bi = run(`LEVELS.findIndex(l => l.rooms && WORLDS[l.world].id === '${id}')`);
+  run(`startAt(${bi}); for (let r = 0; r < LEVELS[${bi}].rooms.length; r++) { win(); for (let i = 0; i < 60; i++) update(); }`);
+  check(`${id} boss -> ${skin} Chotu`, run(`[complete(${W(id)}), save.skins.includes('${skin}'), save.skin]`), [true, true, skin]);
+}
 reset();
 
 // --- quitting mid-level returns to the map zoomed into that world ---
