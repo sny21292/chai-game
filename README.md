@@ -5,7 +5,8 @@ A desi troll platformer (the name means "the floor tricks you"). Guide **Chotu**
 - Play: open `index.html` in a browser (no build step, no dependencies).
 - Controls: ← → move, Space / ↑ jump, R restart, P (or Esc) pause, Q map, O settings, M mute. Tap the title to jump straight into the next level. On the map: tap a state to select, tap again to enter; drag, pinch or scroll to zoom.
 - Languages: English (default) and Hinglish (Settings → Language).
-- States are stages, UTs are optional boss levels. Playable now: Maharashtra, Rajasthan, Kerala, Himachal Pradesh, Uttar Pradesh, Uttarakhand, Goa, Gujarat and Punjab, plus the Delhi, Chandigarh, Andaman & Nicobar, Jammu & Kashmir and Ladakh bosses (82 levels and 21 boss rooms in all).
+- States are stages, UTs are optional boss levels. Playable now: Maharashtra, Rajasthan, Kerala, Himachal Pradesh, Uttar Pradesh, Uttarakhand, Goa, Gujarat, Punjab, Karnataka, Tamil Nadu, Telangana and Andhra Pradesh, plus the Delhi, Chandigarh, Andaman & Nicobar, Jammu & Kashmir and Ladakh bosses (114 levels, 11 of them long multi-screen levels, and 21 boss rooms in all).
+- Dhokha Mode (in Settings) remixes every level with crumbling ledges and spikes that pop up by the door.
 
 Built with vanilla JS and canvas. Music and sound are synthesised with Web Audio.
 

@@ -148,5 +148,31 @@ check('cloud save with more progress is loaded', run(`[save.done.mumbai, save.do
 run(`portalSave(JSON.stringify({ done: { mumbai: 1 } }))`);
 check('cloud save with less progress is ignored', run(`save.done.mumbai`), 10);
 
+// --- south batch: the chain continues after Punjab ---
+reset(); run(`['mumbai', 'rajasthan', 'kerala', 'himalaya', 'up', 'uttarakhand', 'goa', 'gujarat', 'punjab'].forEach(id => save.done[id] = WORLDS[${W('mumbai')}] && 10)`);
+check('Punjab done opens Karnataka', run(`unlocked(${W('karnataka')})`), true);
+check('Tamil Nadu waits for Karnataka', run(`unlocked(${W('tamilnadu')})`), false);
+run(`save.done.karnataka = 8; save.done.tamilnadu = 8; save.done.telangana = 8`);
+check('chain: Tamil Nadu -> Telangana -> Andhra', run(`[unlocked(${W('tamilnadu')}), unlocked(${W('telangana')}), unlocked(${W('andhra')})]`), [true, true, true]);
+
+// --- long levels: screens without checkpoints ---
+reset(); run(`save.done.karnataka = 1; G.paused = false; G.settings = null; Ads.showing = false`);
+const metro = run(`LEVELS.findIndex(l => l.long && WORLDS[l.world].id === 'karnataka')`);
+check('long level is not a boss', run(`[isBoss(LEVELS[${metro}]), levelId(${metro})]`), [false, 'karnataka:2']);
+run(`startAt(${metro}); win(); for (let i = 0; i < 60; i++) update();`);
+check('door -> screen 2, level not done yet', run(`[G.state, G.room, doneIn(${W('karnataka')})]`), ['play', 1, 1]);
+run(`die(); for (let i = 0; i < 60; i++) update();`);
+check('death on screen 2 sends you back to screen 1', run(`[G.state, G.room]`), ['play', 0]);
+run(`win(); for (let i = 0; i < 60; i++) update(); restartLevel()`);
+check('R on screen 2 restarts the whole level', run(`G.room`), 0);
+run(`win(); for (let i = 0; i < 60; i++) update(); win(); for (let i = 0; i < 60; i++) update();`);
+check('last screen door -> next level, level done', run(`[G.state, G.L.def.num, doneIn(${W('karnataka')})]`), ['play', 2, 2]);
+
+// --- Dhokha Mode ---
+reset(); run(`save.dhokha = true; startAt(0)`);
+check('Dhokha Mode makes small ledges crumble or adds door spikes', run(`!!G.L.dk || G.L.solids.some(s => s.crumbleDelay === 26)`), true);
+run(`save.dhokha = false; startAt(0)`);
+check('normal mode untouched', run(`!!G.L.dk`), false);
+
 console.log(fails ? `\n${fails} FAILED` : '\nall flow tests passed');
 process.exit(fails ? 1 : 0);

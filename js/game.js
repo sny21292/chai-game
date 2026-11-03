@@ -3,11 +3,16 @@
 
 // Flattened play order. A boss level has `rooms`: each room is played like a level of its own, a door leads
 // to the next room, and dying sends you back to the start of the current room (the checkpoint).
+// A long level has `screens`: played the same way, but with no checkpoints (dying sends you back to screen 1).
+// Internally it becomes `rooms` + `long: true`, so check `isBoss(lv)` (not `lv.rooms`) for boss-only things.
 const LEVELS = WORLDS.flatMap((w, wi) => w.levels.map((lv, li) => {
   const L = Object.assign({}, lv, { world: wi, num: li });
-  if (lv.rooms) L.rooms = lv.rooms.map((r, ri) => Object.assign({}, r, { world: wi, num: li, room: ri }));
+  const rooms = lv.rooms || lv.screens;
+  if (rooms) L.rooms = rooms.map((r, ri) => Object.assign({ name: lv.name }, r, { world: wi, num: li, room: ri }));
+  if (lv.screens) L.long = true;
   return L;
 }));
+const isBoss = lv => !!lv.rooms && !lv.long;
 const roomDef = (i, room) => (LEVELS[i].rooms ? LEVELS[i].rooms[room] : LEVELS[i]);
 const RED = '#ff4d5e', DOOR = '#5ee6a8', DOOR_DARK = '#2c9c6c', CREAM = '#fbeedd', DIM = '#c9b8a6', INK = '#1a1324';
 const CHAI = '#b8743a', CHAI_TOP = '#e2b277';
@@ -54,7 +59,7 @@ const sfx = {
 const SAVE_KEY = 'floorIsLying.v2';   // old name kept on purpose: renaming the key would wipe everyone's progress
 // done: levels cleared per world id, in order (e.g. { mumbai: 4 }). skins: Chotu looks you have unlocked.
 // lang: null = automatic (English, or Hinglish for a hi-* portal locale), else 'en' | 'hi' (js/lang.js)
-const save = { done: {}, deaths: 0, music: true, sfx: true, vibrate: true, noAds: false, skipped: [], skin: 'glass', skins: ['glass'], lang: null };
+const save = { done: {}, deaths: 0, music: true, sfx: true, vibrate: true, noAds: false, skipped: [], skin: 'glass', skins: ['glass'], lang: null, dhokha: false };
 try { if (typeof localStorage !== 'undefined') Object.assign(save, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) {}
 if ('muted' in save) { if (save.muted) save.music = save.sfx = false; delete save.muted; }   // pre-settings saves
 migrateSave.happened = migrateSave(save);
@@ -133,7 +138,7 @@ const G = {
   settings: null,   // { sel, confirmReset } while the settings panel is open over any screen
 };
 // stable stats ids: world:n for normal levels (e.g. kerala:3), world:boss for a UT boss
-const levelId = i => `${WORLDS[LEVELS[i].world].id}:${LEVELS[i].rooms ? 'boss' : LEVELS[i].num + 1}`;
+const levelId = i => `${WORLDS[LEVELS[i].world].id}:${isBoss(LEVELS[i]) ? 'boss' : LEVELS[i].num + 1}`;
 
 // ---------- simulation ----------
 const hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
@@ -144,8 +149,10 @@ function loadLevel(i, respawn = false, room = 0) {
   if (!respawn) { G.levelDeaths = 0; G.levelFrames = 0; G.room = room; Stats.track('level_start', { level: levelId(i) }); }
   const def = roomDef(i, G.room);
   G.idx = i;
-  const L = G.L = { def, solids: [], spikes: [], doors: [], hazards: [], winds: [], signs: [], r: {}, f: {}, t: 0, gravity: 1, reversed: false, flood: null, msg: null };
+  // L.try: how many times you've died on this level (0-3). Levels use it to change a trap once you've learned it.
+  const L = G.L = { def, try: G.tryOverride ?? Math.min(3, G.levelDeaths), solids: [], spikes: [], doors: [], hazards: [], winds: [], signs: [], r: {}, f: {}, t: 0, gravity: 1, reversed: false, flood: null, msg: null };
   def.build(L);
+  if (save.dhokha && !DHOKHA_SKIP.has(levelId(i) + (LEVELS[i].rooms ? '#' + (G.room + 1) : ''))) dhokhaRemix(L);
   const [sx, sy] = L.start || [60, FY - PH];
   G.P = { x: sx, y: sy, w: PW, h: PH, vx: 0, vy: 0, onGround: false, ground: null, coyote: 0, face: 1, squash: 0, boing: false };
   G.particles = [];
@@ -153,12 +160,36 @@ function loadLevel(i, respawn = false, room = 0) {
   G.state = 'play';
 }
 
+// ---------- Dhokha Mode (Settings): every level gets two extra tricks ----------
+// 1. small plain ledges crumble a moment after you land on them
+// 2. hidden spikes pop up in front of the door as you walk up to it (after a death: earlier, and three of them)
+// Every level is solved with it on (DHOKHA=1 node tools/solve.js); ones it would break are listed here.
+const DHOKHA_SKIP = new Set(['mumbai:7', 'up:9', 'goa:1', 'andaman:boss#4', 'telangana:4']);
+function dhokhaRemix(L) {
+  for (const s of L.solids) {
+    if (s.h <= 20 && s.w <= 200 && !s.crumble && !s.move && !s.vx && !s.ghost && !s.kind && !s.sink && !s.bounce && !s.invisible && !s.fog && !s.crusher) {
+      s.crumble = true; s.crumbleDelay = 26;
+    }
+  }
+  const d = L.doors.find(d => !d.hidden && !d.fake && !d.evil && !d.flip);
+  if (!d) return;
+  const n = L.try >= 1 ? 3 : 2, base = d.y + d.h, sx = d.x - 8 - n * SPH;
+  const under = L.solids.find(s => !s.ghost && s.y === base && s.x <= sx && s.x + s.w >= d.x);
+  if (!under) return;
+  L.dk = { sp: spikes(sx, base, n, { hidden: true }), d, reach: L.try >= 1 ? 230 : 170 };
+  L.spikes.push(L.dk.sp);
+}
+function dhokhaTick(L, P) {
+  const { sp, d, reach } = L.dk, feet = P.y + P.h;
+  once(L, 'dk', P.x + P.w > d.x - reach && P.x + P.w < sp.x - 4 && Math.abs(feet - sp.y) < 6, () => { pop(sp); say(L, 'dhokha mode!'); });
+}
+
 function startAt(i, room = 0) { G.runDeaths = 0; G.runStart = G.frame; loadLevel(i, false, room); }
 
 function die() {
   if (G.state !== 'play') return;
   G.state = 'dead';
-  G.deathTimer = 50;
+  G.deathTimer = 34;   // quick retries: the next attempt should start before the frustration does
   save.deaths++; G.runDeaths++; G.levelDeaths++;
   G.levelFrames += G.L.t;
   persist();
@@ -191,7 +222,8 @@ function nextLevel() {
   if (moreRooms()) {        // through the door into the next room: that's the new checkpoint
     G.room++;
     loadLevel(G.idx, true);
-    say(G.L, T('checkpoint! kamra {r}/{n}', { r: G.room + 1, n: LEVELS[G.idx].rooms.length }), 120);
+    if (LEVELS[G.idx].long) say(G.L, T('aage badho! {r}/{n}', { r: G.room + 1, n: LEVELS[G.idx].rooms.length }), 90);
+    else say(G.L, T('checkpoint! kamra {r}/{n}', { r: G.room + 1, n: LEVELS[G.idx].rooms.length }), 120);
     return;
   }
   const wi = LEVELS[G.idx].world, next = G.idx + 1;
@@ -222,10 +254,11 @@ function skipLevel() {
       return;
     }
     G.paused = false;
-    const room = !!LEVELS[G.idx].rooms && moreRooms();
+    const boss = isBoss(LEVELS[G.idx]), room = boss && moreRooms();
+    if (LEVELS[G.idx].long) G.room = LEVELS[G.idx].rooms.length - 1;   // a long level is skipped whole
     // on a boss, an ad skips the current room, not the whole boss
-    const id = levelId(G.idx) + (LEVELS[G.idx].rooms ? `#${G.room + 1}` : '');
-    Stats.track('level_skip', { level: levelId(G.idx), room: LEVELS[G.idx].rooms ? G.room + 1 : undefined, deaths: G.levelDeaths });
+    const id = levelId(G.idx) + (boss ? `#${G.room + 1}` : '');
+    Stats.track('level_skip', { level: levelId(G.idx), room: boss ? G.room + 1 : undefined, deaths: G.levelDeaths });
     if (!save.skipped.includes(id)) save.skipped.push(id);
     if (!moreRooms()) G.justDone = markDone(G.idx);
     persist();
@@ -240,7 +273,7 @@ function update() {
   G.frame++;
   G.shake = G.shake > 0.3 ? G.shake * 0.85 : 0;
   updateParticles();
-  if (G.state === 'dead') { updateWorld(G.L); if (--G.deathTimer <= 0) loadLevel(G.idx, true); }
+  if (G.state === 'dead') { updateWorld(G.L); if (--G.deathTimer <= 0) { if (LEVELS[G.idx].long) G.room = 0; loadLevel(G.idx, true); } }
   else if (G.state === 'win') { updateWorld(G.L); if (--G.winTimer <= 0) nextLevel(); }
   else if (G.state === 'play') step();
   else if (G.state === 'map') mapUpdate();
@@ -251,6 +284,7 @@ function step() {
   const L = G.L;
   L.t++;
   if (L.def.tick) L.def.tick(L, G.P);
+  if (L.dk) dhokhaTick(L, G.P);
   updateWorld(L);
   if (G.state === 'play') updatePlayer(L, G.P);
 }
@@ -455,7 +489,7 @@ function playNow() {
   G.sel = nextIn(wi);
   startAt(G.sel);
 }
-function restartLevel() { if (G.state === 'play' || G.state === 'dead') { G.paused = false; loadLevel(G.idx, true); } }
+function restartLevel() { if (G.state === 'play' || G.state === 'dead') { G.paused = false; if (LEVELS[G.idx].long) G.room = 0; loadLevel(G.idx, true); } }
 function quitToMenu() {
   if (G.state === 'play' || G.state === 'dead') Stats.track('level_quit', { level: levelId(G.idx), deaths: G.levelDeaths });
   G.paused = false; G.sel = G.idx; openMenu(LEVELS[G.idx].world);
@@ -466,6 +500,7 @@ const SETTINGS = [
   { label: 'Music', key: 'music' },
   { label: 'Sound effects', key: 'sfx' },
   { label: 'Vibration (phone)', key: 'vibrate' },
+  { label: 'Dhokha Mode (mushkil)', key: 'dhokha' },
   { label: 'Bhasha: {l}', lang: true, act: () => { save.lang = lang() === 'en' ? 'hi' : 'en'; persist(); } },
   { label: 'Chotu', skin: true, act: () => cycleSkin() },
   { label: 'Playtest stats download karo', act: () => downloadStats() },
@@ -805,6 +840,91 @@ const KIND_DRAW = {
     ctx.font = `800 14px ${FONT}`; ctx.textAlign = 'left'; ctx.fillText('z', x + w - 10, y - 4 - Math.sin(G.frame * 0.06) * 4); ctx.fillText('z', x + w + 2, y - 18 - Math.sin(G.frame * 0.06 + 1) * 4);
     ctx.fillStyle = '#7a4f22'; ctx.fillRect(x - 14, y + h - 12, 16, 5);
   },
+  metro(x, y, w, h) {          // Namma Metro coach: purple with a stripe and windows
+    ctx.fillStyle = '#6a3d9a'; rrect(x, y, w, h, 8); ctx.fill();
+    ctx.fillStyle = '#d9c7f0'; for (let wx = x + 12; wx < x + w - 24; wx += 34) rrect(wx, y + 5, 24, 11, 3), ctx.fill();
+    ctx.fillStyle = '#4caf50'; ctx.fillRect(x, y + h - 9, w, 4);
+  },
+  bulbs(x, y, w, h) {          // a palace ledge strung with bulbs
+    ctx.fillStyle = '#7e5a42'; rrect(x, y, w, h, 4); ctx.fill();
+    ctx.fillStyle = '#ffe7a0'; for (let bx = x + 5; bx < x + w; bx += 10) { ctx.beginPath(); ctx.arc(bx, y + 3, 3, 0, Math.PI * 2); ctx.fill(); }
+  },
+  haathi(x, y, w, h, s) {      // a Dasara elephant with a gold cloth and a howdah seat on top
+    const f = s.vx > 0 ? 1 : -1;
+    ctx.fillStyle = '#7d7f8a'; rrect(x, y + 14, w, h - 30, 18); ctx.fill();
+    for (const lx of [0.15, 0.4, 0.62, 0.85]) ctx.fillRect(x + w * lx - 7, y + h - 22, 14, 22);
+    const hx = f < 0 ? x - 18 : x + w - 22;
+    ctx.beginPath(); ctx.arc(hx + 20, y + 30, 22, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(hx + (f < 0 ? 0 : 30), y + 36, 10, 40);                                // trunk
+    ctx.fillStyle = '#d4a017'; rrect(x + 14, y + 20, w - 28, 30, 6); ctx.fill();       // gold cloth
+    ctx.fillStyle = '#c0392b'; for (let i = 0; i < 4; i++) ctx.fillRect(x + 20 + i * (w - 40) / 3, y + 44, 6, 10);
+    ctx.fillStyle = '#b8862a'; ctx.fillRect(x + 10, y, w - 20, 16);                    // howdah
+    ctx.fillStyle = INK; ctx.fillRect(hx + (f < 0 ? 10 : 28), y + 24, 4, 4);
+  },
+  toytrain(x, y, w, h) {       // Nilgiri toy train coach: blue with cream windows
+    ctx.fillStyle = '#2f5fa8'; rrect(x, y, w, h - 8, 6); ctx.fill();
+    ctx.fillStyle = '#f4e6c8'; for (let wx = x + 10; wx < x + w - 20; wx += 30) ctx.fillRect(wx, y + 7, 20, 12);
+    ctx.fillStyle = '#7a1f2b'; ctx.fillRect(x - 4, y - 4, w + 8, 6);
+    ctx.fillStyle = INK; for (const wx of [x + 22, x + w - 22]) { ctx.beginPath(); ctx.arc(wx, y + h - 6, 7, 0, Math.PI * 2); ctx.fill(); }
+  },
+  saree(x, y, w, h, s) {       // a silk saree on a line; the real ones have a gold zari border
+    ctx.strokeStyle = '#3a2c2a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - 10, y); ctx.lineTo(x + w + 10, y); ctx.stroke();
+    ctx.fillStyle = '#c2185b'; ctx.fillRect(x, y, w, h + 14);
+    if (!s.fake) { ctx.fillStyle = '#e6b422'; ctx.fillRect(x, y + h + 8, w, 6); ctx.fillRect(x, y, 6, h + 14); ctx.fillRect(x + w - 6, y, 6, h + 14); }
+  },
+  bangles(x, y, w, h) {        // a shelf stacked with glass bangles
+    ctx.fillStyle = '#6a4a3a'; ctx.fillRect(x, y + h - 5, w, 5);
+    const cols = ['#e91e63', '#ffd23f', '#2fd06b', '#3fc3ff', '#ff7a1c'];
+    for (let i = 0; i < w / 10; i++) { ctx.strokeStyle = cols[i % 5]; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.ellipse(x + 5 + i * 10, y + 5, 4, 6, 0, 0, Math.PI * 2); ctx.stroke(); }
+  },
+  handi(x, y, w, h) {          // a big copper biryani pot sealed with dough
+    ctx.fillStyle = '#b5652a'; ctx.beginPath(); ctx.moveTo(x + 20, y); ctx.lineTo(x + w - 20, y); ctx.quadraticCurveTo(x + w + 20, y + h * 0.5, x + w - 10, y + h); ctx.lineTo(x + 10, y + h); ctx.quadraticCurveTo(x - 20, y + h * 0.5, x + 20, y); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.fillRect(x + 10, y + h * 0.45, w - 20, 8);
+    ctx.fillStyle = '#e8d2a0'; ctx.fillRect(x + 14, y - 4, w - 28, 6);
+  },
+  lid(x, y, w, h) {
+    ctx.fillStyle = '#c7793a'; rrect(x, y, w, h, 6); ctx.fill();
+    ctx.fillStyle = '#8a4a1e'; rrect(x + w / 2 - 14, y - 8, 28, 10, 4); ctx.fill();
+  },
+  biscuit(x, y, w, h) {        // an Osmania biscuit
+    ctx.fillStyle = '#e2b26a'; ctx.beginPath(); ctx.ellipse(x + w / 2, y + 8, w / 2, 10, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#b07a3a'; for (let i = 0; i < 5; i++) ctx.fillRect(x + 12 + i * ((w - 24) / 4), y + 6, 3, 3);
+  },
+  set(x, y, w, h) {            // a painted film-set ledge on a plywood flat
+    ctx.fillStyle = '#d8b48a'; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = '#a07850'; ctx.fillRect(x, y + h - 4, w, 4);
+    ctx.strokeStyle = 'rgba(80,50,30,.5)'; ctx.lineWidth = 1; ctx.strokeRect(x + 3, y + 3, w - 6, h - 6);
+  },
+  lift(x, y, w, h) {           // a glass office lift car
+    ctx.fillStyle = '#5a6a7a'; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = 'rgba(160,210,240,.35)'; ctx.fillRect(x + 4, y - 50, w - 8, 50);
+    ctx.strokeStyle = '#5a6a7a'; ctx.lineWidth = 3; ctx.strokeRect(x + 4, y - 50, w - 8, 50);
+  },
+  vault(x, y, w, h) {          // a steel vault door
+    ctx.fillStyle = '#7d8590'; rrect(x, y, w, h, 6); ctx.fill();
+    ctx.strokeStyle = '#4a5058'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x + w / 2, y + h / 2, Math.min(w, h) * 0.3, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#4a5058'; for (const by of [y + 10, y + h - 16]) ctx.fillRect(x + 6, by, w - 12, 6);
+  },
+  sub(x, y, w, h) {            // a grey submarine with a conning tower
+    ctx.fillStyle = '#5d6b78'; ctx.beginPath(); ctx.ellipse(x + w / 2, y + h / 2 + 4, w / 2, h / 2 - 2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(x + w * 0.4, y - 16, w * 0.18, 20);
+    ctx.fillStyle = '#ffd23f'; for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(x + 30 + i * (w - 60) / 3, y + h / 2 + 4, 4, 0, Math.PI * 2); ctx.fill(); }
+  },
+  pillar(x, y, w, h) {         // a carved stone pillar
+    ctx.fillStyle = '#a89a86'; ctx.fillRect(x + 6, y, w - 12, h);
+    ctx.fillStyle = '#c8baa4'; ctx.fillRect(x, y, w, 12); ctx.fillRect(x, y + h - 10, w, 10);
+    ctx.fillStyle = 'rgba(60,40,30,.25)'; for (let yy = y + 22; yy < y + h - 14; yy += 16) ctx.fillRect(x + 10, yy, w - 20, 6);
+  },
+  plate(x, y, w, h) {          // a brass plate
+    ctx.fillStyle = '#d4a017'; ctx.beginPath(); ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2 + 2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#a0760c'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x + w / 2, y + h / 2, w / 2 - 8, h / 2 - 1, 0, 0, Math.PI * 2); ctx.stroke();
+  },
+  toy(x, y, w, h, s) {         // a painted wooden Kondapalli toy on a cart
+    ctx.fillStyle = '#2f9c5a'; rrect(x, y + 6, w, h - 18, 8); ctx.fill();
+    ctx.fillStyle = '#ffd23f'; ctx.fillRect(x + 6, y + 12, w - 12, 6);
+    ctx.fillStyle = '#e94b3c'; ctx.beginPath(); ctx.arc(x + (s.vx < 0 ? 12 : w - 12), y + 8, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = INK; for (const wx of [x + 14, x + w - 14]) { ctx.beginPath(); ctx.arc(wx, y + h - 7, 7, 0, Math.PI * 2); ctx.fill(); }
+  },
   float(x, y, w, h) {          // carnival float: a painted cart with paper flowers
     ctx.fillStyle = '#7b3fa0'; rrect(x, y, w, h - 12, 8); ctx.fill();
     const cols = ['#ff3fa4', '#ffd23f', '#2fd06b', '#3fc3ff'];
@@ -983,6 +1103,25 @@ const HAZARD_DRAW = {
     ctx.fillStyle = 'rgba(255,255,255,.25)';
     for (let x = 10; x < h.w; x += 40) ctx.fillRect(h.x + x + (G.frame * 0.3) % 20, h.y + 14, 14, 2);
   },
+  bull(h) {                    // a Jallikattu bull: a big hump, painted horns
+    const { x, y, w } = h, hh = h.h, f = h.vx < 0 ? -1 : 1, hx = f > 0 ? x + w - 18 : x - 6;
+    ctx.fillStyle = '#5a3d2b'; rrect(x, y + 8, w, hh - 18, 10); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + w * (f > 0 ? 0.62 : 0.38), y + 10, 12, Math.PI, 0); ctx.fill();
+    for (const lx of [0.15, 0.4, 0.65, 0.88]) ctx.fillRect(x + w * lx - 3, y + hh - 12, 6, 12);
+    ctx.fillStyle = '#5a3d2b'; rrect(hx, y + 6, 24, 18, 6); ctx.fill();
+    ctx.strokeStyle = '#ff7a1c'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(hx + 6, y + 8); ctx.lineTo(hx + 2, y - 6); ctx.moveTo(hx + 18, y + 8); ctx.lineTo(hx + 22, y - 6); ctx.stroke();
+    ctx.fillStyle = INK; ctx.fillRect(hx + (f > 0 ? 14 : 6), y + 12, 3, 3);
+  },
+  laser(h) {                   // a red security beam
+    ctx.fillStyle = 'rgba(255,40,60,.35)'; ctx.fillRect(h.x - 3, h.y, h.w + 6, h.h);
+    ctx.fillStyle = '#ff2a3c'; ctx.fillRect(h.x + h.w / 2 - 1.5, h.y, 3, h.h);
+    ctx.fillStyle = '#3a3a48'; ctx.fillRect(h.x - 4, h.y - 8, h.w + 8, 8);
+  },
+  mirchi(h) {                  // a heap of drying red chillies
+    ctx.fillStyle = '#c0182a'; ctx.beginPath(); ctx.ellipse(h.x + h.w / 2, h.y + h.h, h.w / 2, h.h, 0, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = '#ff3b3b'; for (let i = 0; i < 7; i++) { const cx = h.x + 8 + ((i * 17) % (h.w - 16)), cy = h.y + 6 + ((i * 11) % (h.h - 8)); ctx.beginPath(); ctx.ellipse(cx, cy, 7, 2.5, i, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = '#2f9c5a'; for (let i = 0; i < 3; i++) ctx.fillRect(h.x + 14 + i * 16, h.y + 4 + (i % 2) * 6, 3, 3);
+  },
   fire(h) {
     for (let i = 0; i < Math.max(1, Math.round(h.w / 16)); i++) {
       const fx = h.x + 8 + i * 16, fl = Math.sin(G.frame * 0.3 + i * 2) * 3;
@@ -1075,8 +1214,7 @@ function drawWind(z) {
 
 function drawFlood(fl) {
   if (fl.y > H) return;
-  const lava = fl.kind === 'lava';
-  ctx.fillStyle = lava ? '#ff3b6b' : 'rgba(47,127,181,.9)';
+  ctx.fillStyle = { lava: '#ff3b6b', kaapi: 'rgba(122,72,38,.95)' }[fl.kind] || 'rgba(47,127,181,.9)';
   ctx.beginPath(); ctx.moveTo(0, H);
   for (let x = 0; x <= W; x += 16) ctx.lineTo(x, fl.y + Math.sin(x * 0.04 + G.frame * 0.1) * 4);
   ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
@@ -1112,14 +1250,17 @@ function drawLevel() {
   rrect(10, 10, 380, 30, 15); ctx.fill();
   rrect(W - 230, 10, 220, 30, 15); ctx.fill();
   const lv = LEVELS[G.idx];
-  text(lv.rooms ? T('BOSS {b}  ·  kamra {r}/{n}  ·  {name}', { b: T(lv.name), r: G.room + 1, n: lv.rooms.length, name: T(L.def.name) }) : `${wd.name}  ${L.def.num + 1}/${wd.levels.length}  ·  ${T(L.def.name)}`, 26, 26, 14, lv.rooms ? '#ffcf6b' : CREAM, 'left', 700);
+  const boss = isBoss(lv);
+  text(boss ? T('BOSS {b}  ·  kamra {r}/{n}  ·  {name}', { b: T(lv.name), r: G.room + 1, n: lv.rooms.length, name: T(L.def.name) })
+    : `${wd.name}  ${L.def.num + 1}/${wd.levels.length}  ·  ${T(lv.name)}` + (lv.long ? `  ·  ${G.room + 1}/${lv.rooms.length}` : ''), 26, 26, 14, boss ? '#ffcf6b' : CREAM, 'left', 700);
   text(T('yahan ☠ {n}', { n: G.levelDeaths }), W - 216, 26, 14, DIM, 'left', 700);
   text(T('total ☠ {n}', { n: save.deaths }), W - 24, 26, 14, RED, 'right', 800);
 
   if (L.t < 100 && G.state === 'play' && !G.paused) {
     ctx.globalAlpha = Math.min(1, (100 - L.t) / 30);
-    if (lv.rooms && G.room === 0) { text(T('BOSS: {b}', { b: T(lv.name) }), W / 2, 130, 46, RED); text(T('{w} · {n} kamre, har kamre pe checkpoint', { w: wd.name, n: lv.rooms.length }), W / 2, 175, 18, CREAM, 'center', 600); }
-    else if (lv.rooms) text(T(L.def.name), W / 2, 150, 34, CREAM);
+    if (lv.long && G.room > 0) { /* the next screen of a long level: straight on, no title */ }
+    else if (boss && G.room === 0) { text(T('BOSS: {b}', { b: T(lv.name) }), W / 2, 130, 46, RED); text(T('{w} · {n} kamre, har kamre pe checkpoint', { w: wd.name, n: lv.rooms.length }), W / 2, 175, 18, CREAM, 'center', 600); }
+    else if (boss) text(T(L.def.name), W / 2, 150, 34, CREAM);
     else if (L.def.num === 0) { text(wd.name, W / 2, 130, 46, '#ffcf6b'); text(T(wd.tagline), W / 2, 175, 18, CREAM, 'center', 600); }
     else text(T(L.def.name), W / 2, 150, 34, CREAM);
     ctx.globalAlpha = 1;
@@ -1159,24 +1300,24 @@ function drawSettings() {
   G.buttons = [];   // the panel is modal: nothing underneath is clickable
   text(T('settings'), W / 2, 40, 32, '#ffcf6b');
   SETTINGS.forEach((row, i) => {
-    const y = 66 + i * 48, on = i === st.sel;
+    const y = 62 + i * 42, on = i === st.sel;
     let label = T(row.label);
     if (row.key) label += '   ' + T(save[row.key] ? 'ON' : 'OFF');
     if (row.lang) label = T(row.label, { l: LANGS[lang()] });
     if (row.skin) label = skinLabel();
     if (row.reset && st.confirmReset) label = T('pakka? sab progress mit jayega. phir dabao');
     ctx.fillStyle = on ? '#ffcf6b' : 'rgba(251,238,221,.12)';
-    rrect(W / 2 - 250, y, 500, 40, 20); ctx.fill();
-    text(label, W / 2, y + 21, 17, on ? INK : (row.key && !save[row.key] ? DIM : CREAM), 'center', 700);
-    button(W / 2 - 250, y, 500, 40, () => (st.sel === i ? activateSetting(i) : (st.sel = i)));
+    rrect(W / 2 - 250, y, 500, 36, 18); ctx.fill();
+    text(label, W / 2, y + 19, label.length > 48 ? 13 : 17, on ? INK : (row.key && !save[row.key] ? DIM : CREAM), 'center', 700);
+    button(W / 2 - 250, y, 500, 36, () => (st.sel === i ? activateSetting(i) : (st.sel = i)));
   });
-  text(T('↑ ↓ chuno  ·  ENTER badlo  ·  O wapas  ·  tap twice to change'), W / 2, 466, 14, DIM, 'center', 600);
+  text(T('↑ ↓ chuno  ·  ENTER badlo  ·  O wapas  ·  tap twice to change'), W / 2, 458, 14, DIM, 'center', 600);
   const lv = Stats.data.levels, played = Object.keys(lv).length;
   if (played) {
     const worst = Object.entries(lv).sort((a, b) => b[1].deaths - a[1].deaths)[0];
-    text(T('is device pe: {n} levels khele · sabse zyada ☠ {l} ({d})', { n: played, l: worst[0], d: worst[1].deaths }), W / 2, 492, 14, DIM, 'center', 600);
+    text(T('is device pe: {n} levels khele · sabse zyada ☠ {l} ({d})', { n: played, l: worst[0], d: worst[1].deaths }), W / 2, 486, 14, DIM, 'center', 600);
   }
-  text(T('naksha: Survey of India (DataMeet, CC BY 2.5 IN)'), W / 2, 518, 14, DIM, 'center', 600);
+  text(T('naksha: Survey of India (DataMeet, CC BY 2.5 IN)'), W / 2, 514, 14, DIM, 'center', 600);
 }
 
 function drawAd() {

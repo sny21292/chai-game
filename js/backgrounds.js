@@ -346,6 +346,99 @@ const THEMES = {
       }
     },
   },
+  karnataka: {
+    // Mysore palace lit up for Dasara against a violet evening, Chamundi hill behind
+    pal: { block: '#b98c6a', top: '#e8c27a', shade: '#7e5a42', text: '#fff4e2' },
+    paint(c) {
+      skyGradient(c, ['#1d1838', '#3d2a5e', '#7a4a7a', '#d9866a']);
+      c.fillStyle = '#2a2244';                                                          // Chamundi hill
+      c.beginPath(); c.moveTo(0, 330); c.quadraticCurveTo(260, 200, 560, 300); c.quadraticCurveTo(760, 250, W, 320); c.lineTo(W, H); c.lineTo(0, H); c.fill();
+      const bulbs = (x0, x1, y) => { c.fillStyle = '#ffe7a0'; for (let x = x0; x <= x1; x += 9) c.fillRect(x - 1, y - 1, 3, 3); };
+      c.fillStyle = '#3a2c4a';                                                          // the palace: wings, towers, domes
+      c.fillRect(250, 250, 460, 150);
+      c.fillRect(420, 190, 120, 210);
+      for (const x of [250, 330, 610, 690]) c.fillRect(x - 12, 210, 24, 190);
+      for (const [x, y, r] of [[480, 190, 40], [250, 210, 16], [330, 210, 16], [610, 210, 16], [690, 210, 16]]) { c.beginPath(); c.arc(x, y, r, Math.PI, 0); c.fill(); }
+      c.fillRect(477, 128, 6, 26);
+      bulbs(250, 710, 250); bulbs(420, 540, 190); bulbs(250, 710, 300); bulbs(250, 710, 350);
+      for (const x of [250, 330, 610, 690]) for (let y = 214; y < 400; y += 10) { c.fillStyle = '#ffe7a0'; c.fillRect(x - 13, y, 3, 3); c.fillRect(x + 10, y, 3, 3); }
+      c.strokeStyle = '#ffe7a0'; c.lineWidth = 2;
+      c.beginPath(); c.arc(480, 190, 40, Math.PI, 0); c.stroke();
+      for (let x = 290; x < 680; x += 46) { c.beginPath(); c.arc(x, 400, 16, Math.PI, 0); c.stroke(); }
+      c.fillStyle = '#26213a'; c.fillRect(0, 400, W, H - 400);
+      for (const x of [60, 150, 820, 900]) {                                              // coconut trees by the gate
+        c.fillStyle = '#1c1830'; c.fillRect(x - 3, 300, 6, 100);
+        c.beginPath(); c.ellipse(x, 300, 30, 10, 0, 0, Math.PI * 2); c.fill();
+      }
+    },
+    live(c, f) {
+      c.fillStyle = 'rgba(255,231,160,.5)';                                              // twinkles on the palace
+      for (let i = 0; i < 8; i++) if ((f >> 3) % 8 === i) { const x = 250 + ((i * 61) % 460); c.beginPath(); c.arc(x, 250 + (i % 3) * 50, 4, 0, Math.PI * 2); c.fill(); }
+    },
+  },
+  tamilnadu: {
+    // sunrise over the Bay of Bengal: a painted temple tower, the Marina lighthouse, palms and fishing boats
+    pal: { block: '#c9a27a', top: '#f0d8a8', shade: '#8a6a4a', text: '#fff7ea' },
+    paint(c) {
+      skyGradient(c, ['#3a2a6a', '#c0566a', '#f39a5a', '#ffd88a']);
+      c.fillStyle = '#ffe8a8'; c.beginPath(); c.arc(700, 330, 50, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#2f5f8a'; c.fillRect(0, 340, W, H - 340);
+      c.fillStyle = 'rgba(255,232,168,.35)'; for (let i = 0; i < 14; i++) c.fillRect(650 + ((i * 29) % 100), 350 + i * 6, 34, 2);
+      const tiers = [[180, 360, 150], [190, 330, 130], [200, 300, 110], [210, 270, 90], [220, 240, 70], [230, 212, 50]];   // temple tower
+      const cols = ['#d9583a', '#f2b33d', '#3fa36b', '#3a7fc2', '#e86aa0', '#f2b33d'];
+      tiers.forEach(([x, y, w], i) => { c.fillStyle = cols[i]; c.fillRect(x, y, w, 30); c.fillStyle = 'rgba(0,0,0,.15)'; for (let k = x + 6; k < x + w - 4; k += 12) c.fillRect(k, y + 6, 6, 18); });
+      c.fillStyle = '#f2b33d'; c.beginPath(); c.ellipse(255, 206, 30, 10, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#e8e2d6'; c.fillRect(520, 220, 26, 120); c.fillStyle = '#c0392b'; c.fillRect(516, 210, 34, 14);     // lighthouse
+      c.fillStyle = '#e8cf9a'; c.fillRect(0, 380, W, H - 380);
+      for (const [x, y] of [[620, 372], [820, 368]]) { c.fillStyle = '#5a3a28'; c.beginPath(); c.moveTo(x - 40, y); c.lineTo(x + 40, y); c.lineTo(x + 30, y + 12); c.lineTo(x - 30, y + 12); c.fill(); }
+      palm(c, 60, 400, 150, 24, '#24302a'); palm(c, 900, 400, 140, -26, '#24302a');
+    },
+    live(c, f) {
+      c.strokeStyle = 'rgba(255,255,255,.3)'; c.lineWidth = 2;
+      for (let i = 0; i < 2; i++) { const y = 372 + Math.sin(f * 0.03 + i) * 3; c.beginPath(); for (let x = 0; x <= W; x += 24) c.lineTo(x, y + i * 4 + Math.sin(x * 0.05 + f * 0.05) * 2); c.stroke(); }
+    },
+  },
+  telangana: {
+    // Charminar at dusk over the old city, rooftops and a crescent moon, pigeons on the wires
+    pal: { block: '#c8a888', top: '#ecd5b0', shade: '#8a6e56', text: '#fff6ea' },
+    paint(c) {
+      skyGradient(c, ['#1f2a5a', '#4a3f7a', '#c0707a', '#f2b98a']);
+      c.fillStyle = '#fff1c8'; c.beginPath(); c.arc(820, 90, 22, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#4a3f7a'; c.beginPath(); c.arc(830, 84, 20, 0, Math.PI * 2); c.fill();
+      const r = seeded(19);
+      for (let x = 0; x < W;) { const w = 50 + r() * 60, h = 50 + r() * 70; c.fillStyle = r() < 0.5 ? '#3a2f4e' : '#43365a'; c.fillRect(x, 400 - h, w, h); x += w; }
+      c.fillStyle = '#d9c3a0';                                                          // Charminar: four minarets and arches
+      c.fillRect(380, 230, 200, 170);
+      for (const x of [372, 568]) { c.fillRect(x, 120, 20, 280); c.beginPath(); c.arc(x + 10, 120, 12, Math.PI, 0); c.fill(); for (let y = 160; y < 400; y += 60) c.fillRect(x - 4, y, 28, 6); }
+      c.fillStyle = '#3a2f4e'; for (const x of [420, 480]) { c.beginPath(); c.moveTo(x, 400); c.lineTo(x, 320); c.quadraticCurveTo(x + 30, 270, x + 60, 320); c.lineTo(x + 60, 400); c.fill(); }
+      c.fillStyle = '#c4ad88'; c.fillRect(380, 222, 200, 10);
+      c.fillStyle = '#2a2240'; c.fillRect(0, 400, W, H - 400);
+      c.strokeStyle = 'rgba(20,15,30,.6)'; c.lineWidth = 1; c.beginPath(); c.moveTo(0, 190); c.quadraticCurveTo(200, 210, 360, 196); c.stroke();
+      c.fillStyle = '#2a2240'; for (const x of [80, 130, 170, 260, 300]) { c.beginPath(); c.ellipse(x, 197 + Math.sin(x) * 4, 6, 4, 0, 0, Math.PI * 2); c.fill(); }
+    },
+    live(c, f) {
+      c.fillStyle = 'rgba(255,230,170,.7)';
+      for (let i = 0; i < 12; i++) if (((f >> 4) + i * 7) % 5) c.fillRect(20 + i * 80, 360 + (i % 3) * 12, 4, 4);
+    },
+  },
+  andhra: {
+    // the Godavari at dusk between the Papikondalu hills, chilli fields on the bank
+    pal: { block: '#b7926a', top: '#e2c08a', shade: '#7e6248', text: '#fff6e8' },
+    paint(c) {
+      skyGradient(c, ['#24305a', '#5a4a7a', '#e0806a', '#ffcf8a']);
+      c.fillStyle = '#3a4a5a';
+      c.beginPath(); c.moveTo(0, 320); c.quadraticCurveTo(120, 170, 260, 300); c.quadraticCurveTo(360, 200, 480, 300); c.quadraticCurveTo(620, 150, 760, 300); c.quadraticCurveTo(860, 220, W, 300); c.lineTo(W, 360); c.lineTo(0, 360); c.fill();
+      c.fillStyle = '#2f3f4e'; c.beginPath(); c.moveTo(0, 340); c.quadraticCurveTo(220, 260, 420, 340); c.quadraticCurveTo(700, 270, W, 340); c.lineTo(W, 360); c.lineTo(0, 360); c.fill();
+      c.fillStyle = '#4a7aa0'; c.fillRect(0, 350, W, 60);
+      c.fillStyle = 'rgba(255,207,138,.35)'; for (let i = 0; i < 12; i++) c.fillRect(380 + ((i * 41) % 200), 356 + i * 4, 40, 2);
+      c.fillStyle = '#6a8a3a'; c.fillRect(0, 400, W, H - 400);
+      c.fillStyle = '#8a3a22'; for (let i = 0; i < 40; i++) c.fillRect((i * 97) % W, 412 + (i * 7) % 24, 6, 3);
+    },
+    live(c, f) {
+      const x = (f * 0.4) % (W + 120) - 60;                                              // a launch far off on the river
+      c.fillStyle = '#e8e2d6'; c.fillRect(x, 366, 50, 8); c.fillStyle = '#c0392b'; c.fillRect(x + 10, 358, 30, 8);
+    },
+  },
   andaman: {
     // turquoise water, green islands, a lighthouse on the point
     pal: { block: '#d7c08e', top: '#f4e6bc', shade: '#9c845a', text: '#f4fffb' },

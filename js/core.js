@@ -48,6 +48,13 @@ function drop(s, vy = 0) { s.falling = true; s.vy = vy; sfx.trap(); }
 function pop(sp) { if (sp.hidden) { sp.hidden = false; sfx.trap(); } }
 function trigger(h) { if (!h.active) { h.active = true; sfx.trap(); } }
 function say(L, text, t = 110) { L.msg = { text, t }; }
+// domino floor: once `cond` is true, the blocks drop one after another, `every` frames apart (counter in L.f[key])
+function domino(L, blocks, cond, key = 'dom', every = 10) {
+  if (L.f[key] == null) { if (cond) L.f[key] = 0; else return; }
+  if (L.f[key] >= blocks.length * every) return;
+  const k = L.f[key]++;
+  if (k % every === 0 && !blocks[k / every].falling) drop(blocks[k / every]);
+}
 // a walker (crab, yak...) paces between two x limits; its direction lives in L.f[key] so the solver sees it
 function crabWalk(L, c, lo, hi, key = 'd', speed = 1.6) {
   if (c.x <= lo) L.f[key] = 1;

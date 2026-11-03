@@ -1,11 +1,12 @@
 // Offline support: cache the whole game on first visit; always try the network first, fall back to the cache offline.
 // Bump VERSION whenever you deploy so players pick up the new files.
-const VERSION = 'fil-v6';
+const VERSION = 'fil-v7';
 const FILES = [
   './', './index.html', './manifest.webmanifest',
   './js/core.js', './js/lang.js', './js/backgrounds.js', './js/services.js', './js/music.js', './js/map-data.js', './js/map.js', './js/game.js',
   './js/worlds/mumbai.js', './js/worlds/delhi.js', './js/worlds/rajasthan.js', './js/worlds/kerala.js', './js/worlds/himalaya.js',
   './js/worlds/up.js', './js/worlds/uttarakhand.js', './js/worlds/goa.js', './js/worlds/gujarat.js', './js/worlds/punjab.js',
+  './js/worlds/karnataka.js', './js/worlds/tamilnadu.js', './js/worlds/telangana.js', './js/worlds/andhra.js',
   './js/worlds/andaman.js', './js/worlds/kashmir.js', './js/worlds/ladakh.js', './js/worlds/chandigarh.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png',
 ];

@@ -15,6 +15,8 @@ for (const dir of [1, 0, -1]) for (const jump of [1, 0]) ACTIONS.push([dir, jump
 
 function solveLevel(idx, room = 0) {
   const { G, LEVELS, loadLevel, step, press } = require('./harness');
+  if (process.env.DHOKHA) require('./harness').run('save.dhokha = true');   // DHOKHA=1: solve with Dhokha Mode on
+  if (process.env.TRY) require('./harness').run('G.tryOverride = ' + (+process.env.TRY));   // TRY=n: as if you'd died n times (L.try)
   const def = () => (LEVELS[idx].rooms ? LEVELS[idx].rooms[room] : LEVELS[idx]);
   const snap = () => structuredClone({ L: { ...G.L, def: null }, P: G.P, jumpBuf: G.jumpBuf, held: G.held, state: G.state });
   const restore = s => {

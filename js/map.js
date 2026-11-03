@@ -356,7 +356,7 @@ function drawRegionPanel() {
   text(w.name, x, 82, w.name.length > 14 ? 24 : 30, '#ffcf6b', 'left');
   wrapText(T(w.tagline), x, 112, PANEL.w, 14, DIM);
   const lv0 = LEVELS[first];
-  if (lv0.rooms) {
+  if (isBoss(lv0)) {
     // a boss: one big tile
     const on = G.sel === first, y = 150;
     ctx.fillStyle = on ? '#ffcf6b' : 'rgba(251,238,221,.14)'; rrect(x, y, PANEL.w, 150, 18); ctx.fill();
@@ -380,7 +380,7 @@ function drawRegionPanel() {
     });
   }
   const lv = LEVELS[G.sel];
-  if (lv && lv.world === wi && !lv.rooms) text(T(lv.name), x, 330, 20, CREAM, 'left');
+  if (lv && lv.world === wi && !isBoss(lv)) text(T(lv.name), x, 330, 20, CREAM, 'left');
   panelButton('Play ▶', x, 360, PANEL.w, 44, true, () => startAt(G.sel));
   if (G.frame % 60 < 42) text('ENTER to play · or tap a tile twice', x, 440, 14, DOOR, 'left', 700);
   text(TOUCH ? '' : 'Arrows to choose · Q map · O settings', x, 470, 14, DIM, 'left', 600);

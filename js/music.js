@@ -14,6 +14,10 @@ const MUSIC_THEMES = {
   goa: { root: 196.0, bpm: 92 },          // G
   gujarat: { root: 185.0, bpm: 108 },     // F#, garba tempo
   punjab: { root: 116.54, bpm: 112 },     // A#, bhangra tempo
+  karnataka: { root: 233.08, bpm: 94 },   // A#
+  tamilnadu: { root: 220.0, bpm: 100 },   // A
+  telangana: { root: 196.0, bpm: 90 },    // G
+  andhra: { root: 246.94, bpm: 98 },      // B
   andaman: { root: 207.65, bpm: 86 },     // G#
   kashmir: { root: 103.83, bpm: 72 },     // G#, low and slow
   ladakh: { root: 98.0, bpm: 70 },        // G
