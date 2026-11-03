@@ -89,9 +89,48 @@ for (const c of ['MH', 'RJ', 'KL', 'HP', 'DL', 'UP', 'UK', 'CH', 'GA', 'SK', 'TR
   check(`tap on ${c} hits ${c}`, tap(c), c);
 check('tap in the sea hits nothing', run(`regionAt(MAP_AREA.x + 500, MAP_AREA.y + 500)`), null);
 run(`mapTap(...toScreen(G.map.cam, ...MAP_BY_CODE.MP.c))`);
-check('greyed state: selected, toast says jald aa raha hai', run(`[G.map.sel, G.map.zoom, /jald aa raha hai/.test(G.map.toast.text)]`), ['MP', null, true]);
+check('greyed state: selected, toast says coming soon', run(`[G.map.sel, G.map.zoom, /coming soon/.test(G.map.toast.text)]`), ['MP', null, true]);
 run(`const p = toScreen(G.map.cam, ...MAP_BY_CODE.MH.c); mapTap(...p); mapTap(...p);`);
 check('double tap on Maharashtra zooms in', run(`G.map.zoom`), 0);
+
+
+// --- one tap from the title into play ---
+reset(); run(`G.state = 'title'; playNow()`);
+check('fresh: title tap starts Maharashtra 1', run(`[G.state, G.idx]`), ['play', 0]);
+reset(); run(`save.done.mumbai = 10; save.done.rajasthan = 3; G.state = 'title'; playNow()`);
+check('returning: title tap continues at Rajasthan 4', run(`[G.state, LEVELS[G.idx].world, LEVELS[G.idx].num]`), ['play', W('rajasthan'), 3]);
+run(`G.state = 'title'; onKey({ code: 'KeyQ' })`);
+check('Q on the title opens the map', run(`G.state`), 'map');
+
+// --- pause, Escape and the rewarded skip ---
+reset(); run(`startAt(0); onKey({ code: 'Escape' })`);
+check('Escape pauses (never quits)', run(`[G.state, G.paused]`), ['play', true]);
+run(`onKey({ code: 'KeyQ' })`);
+check('Q in pause goes to the map', run(`G.state`), 'map');
+reset(); run(`Ads.provider = { rewarded: async () => true, interstitial: async () => {} }; startAt(0); G.levelDeaths = 5`);
+run(`skipLevel()`);
+check('no skip while playing (only from the pause menu)', run(`Ads.busy`), false);
+run(`G.paused = true; skipLevel()`);
+check('skip from pause asks for an ad', run(`Ads.busy`), true);
+run(`Ads.ended('adsDisabled')`);
+check('adsDisabled hides every ad offer', run(`[Ads.blocked, Ads.available]`), [true, false]);
+run(`Ads.provider = null; Ads.blocked = false; Ads.busy = false`);
+
+// --- language ---
+reset();
+check('English by default', run(`T('chai thandi ho gayi')`), 'the chai went cold');
+run(`setAutoLang('hi-IN')`);
+check('hi locale gets Hinglish', run(`T('chai thandi ho gayi')`), 'chai thandi ho gayi');
+run(`setAutoLang('en-US'); save.lang = 'hi'`);
+check('Settings choice wins over locale', run(`T('chai thandi ho gayi')`), 'chai thandi ho gayi');
+run(`save.lang = null`);
+check('placeholders', run(`T('ab tak ☠ {n}', { n: 7 })`), 'deaths so far ☠ 7');
+
+// --- portal cloud save: the one with more progress wins ---
+reset(); run(`save.done.mumbai = 2; portalSave(JSON.stringify({ done: { mumbai: 10, rajasthan: 1 }, deaths: 40 }))`);
+check('cloud save with more progress is loaded', run(`[save.done.mumbai, save.done.rajasthan, save.deaths]`), [10, 1, 40]);
+run(`portalSave(JSON.stringify({ done: { mumbai: 1 } }))`);
+check('cloud save with less progress is ignored', run(`save.done.mumbai`), 10);
 
 console.log(fails ? `\n${fails} FAILED` : '\nall flow tests passed');
 process.exit(fails ? 1 : 0);

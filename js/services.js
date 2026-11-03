@@ -55,12 +55,19 @@ const Ads = {
     minSecondsBetweenBreaks: 120,  // ...and never more often than every 2 minutes
     offerSkipAfterDeaths: 5,       // "skip this level" (rewarded ad) appears after this many deaths on a level
   },
-  provider: null, showing: null, busy: false, levelsSinceBreak: 0, lastBreakAt: 0,
+  // showing: set by the provider when the ad actually starts (that's when the game mutes), not on request.
+  // blocked: the portal said ads are off (Basic Launch) or blocked; then no ad offers are shown at all.
+  provider: null, showing: null, busy: false, blocked: false, levelsSinceBreak: 0, lastBreakAt: 0,
   init() {
     this.provider = (hasWindow && window.FIL_ADS_PROVIDER) || (query.get('ads') === 'mock' ? MockAds : null);
     if (!this.provider && Portal.wanted()) Portal.init();     // sets provider once the portal SDK is ready
   },
-  get available() { return !!this.provider && !this.busy; },
+  get available() { return !!this.provider && !this.busy && !this.blocked; },
+  started(type) { this.showing = { type }; },
+  ended(errorCode) {
+    this.showing = null;
+    if (errorCode === 'adsDisabled' || errorCode === 'adblock') this.blocked = true;
+  },
   levelCleared() { this.levelsSinceBreak++; },
   wantsBreak(pastFirstWorld, noAds) {
     const r = this.RULES;
@@ -69,7 +76,7 @@ const Ads = {
   },
   async rewarded(placement) {
     if (!this.available) return false;
-    this.busy = true; this.showing = { type: 'rewarded' };    // game paused + muted while any ad is up
+    this.busy = true;      // the game stays paused while busy, and is muted once the ad starts
     let ok = false;
     try { ok = !!(await this.provider.rewarded(placement)); } catch (e) { ok = false; }
     this.busy = false; this.showing = null;
@@ -78,7 +85,7 @@ const Ads = {
   },
   async interstitial(placement) {
     if (!this.available) return;
-    this.busy = true; this.showing = { type: 'interstitial' };
+    this.busy = true;
     try { await this.provider.interstitial(placement); } catch (e) {}
     this.busy = false; this.showing = null;
     this.levelsSinceBreak = 0;
@@ -90,8 +97,8 @@ const MockAds = {
   name: 'mock',
   show(type, result) {
     return new Promise(done => {
-      Ads.showing = { type };
-      setTimeout(() => { Ads.showing = null; done(result); }, 2500);
+      Ads.started(type);
+      setTimeout(() => { Ads.ended(); done(result); }, 2500);
     });
   },
   rewarded() { return this.show('rewarded', true); },
@@ -103,7 +110,8 @@ const MockAds = {
 // test the SDK's local mode). Docs: docs.crazygames.com/sdk (ads: requestAd 'midgame' | 'rewarded';
 // game: gameplayStart/Stop, happytime, settings.muteAudio). Poki would get a sibling adapter here later.
 const Portal = {
-  name: null, game: null, playing: null, muted: false,
+  name: null, game: null, data: null, playing: null, muted: false,
+  onReady: null,   // set by game.js: ({ locale, save }) once the SDK is up (save = the cloud save string or null)
   wanted() {
     return hasWindow && (query.get('portal') === 'crazygames' || /(^|\.)crazygames\./.test(location.hostname));
   },
@@ -119,7 +127,14 @@ const Portal = {
         this.muted = !!(SDK.game.settings && SDK.game.settings.muteAudio);
         SDK.game.addSettingsChangeListener(st => { this.muted = !!st.muteAudio; });
         if (!Ads.provider) Ads.provider = CrazyGamesAds;
-        Stats.track('portal_ready', { portal: this.name, env: SDK.environment });
+        // Data module (progress saves follow a logged-in player across devices). Enabled with the
+        // "Progress Save" toggle when submitting; without it SDK.data is missing or throws, and localStorage is used.
+        this.data = SDK.data || null;
+        let save = null, locale = null;
+        try { if (this.data) save = this.data.getItem(SAVE_KEY); } catch (e) {}
+        try { locale = SDK.user && SDK.user.systemInfo && SDK.user.systemInfo.locale; } catch (e) {}
+        if (this.onReady) this.onReady({ locale, save });
+        Stats.track('portal_ready', { portal: this.name, env: SDK.environment, data: !!this.data, locale });
       } catch (e) { Stats.track('portal_error', { portal: 'crazygames', message: String(e && e.message) }); }
     };
     document.head.appendChild(s);
@@ -130,6 +145,7 @@ const Portal = {
     this.playing = on;
     try { on ? this.game.gameplayStart() : this.game.gameplayStop(); } catch (e) {}
   },
+  store(key, value) { try { if (this.data) this.data.setItem(key, value); } catch (e) {} },
   happy() { try { if (this.game) this.game.happytime(); } catch (e) {} },   // big moments only: a boss, the whole map
 };
 const CrazyGamesAds = {
@@ -138,9 +154,10 @@ const CrazyGamesAds = {
     return new Promise(done => {
       try {
         window.CrazyGames.SDK.ad.requestAd(type, {
-          adStarted: () => {},
-          adFinished: () => done(true),
-          adError: e => { Stats.track('ad_error', { type, code: e && e.code }); done(false); },   // unfilled, cooldown, adblock...
+          adStarted: () => Ads.started(type === 'rewarded' ? 'rewarded' : 'interstitial'),
+          adFinished: () => { Ads.ended(); done(true); },
+          // adsDisabled (Basic Launch), adblock, unfilled, adCooldown, other: no reward
+          adError: e => { const code = e && e.code; Ads.ended(code); Stats.track('ad_error', { type, code }); done(false); },
         });
       } catch (e) { done(false); }
     });

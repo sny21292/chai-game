@@ -1,0 +1,44 @@
+<!doctype html>
+<!-- Portal cover art, drawn with the game's own renderer. Opened by tools/covers.sh as cover.html?w=1920&h=1080.
+     CrazyGames rules: only the title as text, no logos/icons/borders. -->
+<html><head><meta charset="utf-8"><style>html,body{margin:0;background:#1a1324}canvas{display:block}</style></head>
+<body><canvas id="cover"></canvas>
+<script src="../js/core.js"></script><script src="../js/lang.js"></script><script src="../js/backgrounds.js"></script>
+<script src="../js/worlds/mumbai.js"></script><script src="../js/worlds/delhi.js"></script><script src="../js/worlds/rajasthan.js"></script>
+<script src="../js/worlds/kerala.js"></script><script src="../js/worlds/himalaya.js"></script><script src="../js/worlds/up.js"></script>
+<script src="../js/worlds/uttarakhand.js"></script><script src="../js/worlds/chandigarh.js"></script><script src="../js/map-data.js"></script>
+<script src="../js/services.js"></script><script src="../js/music.js"></script><script src="../js/map.js"></script><script src="../js/game.js"></script>
+<script>
+const q = new URLSearchParams(location.search), CW = +q.get('w') || 1920, CH = +q.get('h') || 1080;
+const c = document.getElementById('cover'); c.width = CW; c.height = CH;
+ctx = c.getContext('2d');
+G.frame = 30;
+// background: the Mumbai skyline, scaled to cover
+const bg = document.createElement('canvas'); bg.width = W * 2; bg.height = H * 2;
+const bx = bg.getContext('2d'); bx.scale(2, 2); THEMES.mumbai.paint(bx);
+const s = Math.max(CW / W, CH / H);
+ctx.drawImage(bg, (CW - W * s) / 2, (CH - H * s) / 2, W * s, H * s);
+const gr = ctx.createLinearGradient(0, 0, 0, CH); gr.addColorStop(0, 'rgba(20,12,24,.55)'); gr.addColorStop(.5, 'rgba(20,12,24,.1)'); gr.addColorStop(1, 'rgba(20,12,24,.6)');
+ctx.fillStyle = gr; ctx.fillRect(0, 0, CW, CH);
+// the scene in a 960-wide "stage", fitted to the narrow side
+const k = Math.min(CW / 640, CH / 560), ox = CW / 2 - 520 * k, oy = CH - 290 * k;   // centred on the hole, cropped on narrow covers
+ctx.save(); ctx.translate(ox, oy); ctx.scale(k, k);
+const pal = THEMES.mumbai.pal;
+const blockAt = (x, y, w, h, rot) => { ctx.save(); ctx.translate(x + w / 2, y + h / 2); ctx.rotate(rot || 0); drawSolid({ x: -w / 2, y: -h / 2, w, h }, pal); ctx.restore(); };
+blockAt(-200, 120, 520, 300); blockAt(640, 120, 600, 300);
+blockAt(360, 200, 240, 40, 0.18);                       // the floor that lied, falling
+drawSpikes({ x: 700, y: 120, w: 5 * SPH, pop: 1, dir: 'up' });
+drawDoor({ x: 860, y: 60, w: 40, h: 60, alpha: 1 });
+ctx.save(); ctx.translate(440, 150); ctx.rotate(-0.25); ctx.scale(4.2, 4.2); drawChotu(PW, PH, 1, false); ctx.restore();
+ctx.restore();
+// title
+const t = Math.min(CW * 0.11, CH * 0.13);
+ctx.font = `900 ${t}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+const lines = CW / CH < 1.2 ? ['FLOOR PE', 'DHOKHA'] : ['FLOOR PE DHOKHA'];
+lines.forEach((l, i) => {
+  const y = CH * (lines.length > 1 ? 0.16 : 0.2) + i * t * 1.05;
+  ctx.lineWidth = t * 0.12; ctx.strokeStyle = '#1a1324'; ctx.lineJoin = 'round'; ctx.strokeText(l, CW / 2, y);
+  ctx.fillStyle = '#ffcf6b'; ctx.fillText(l, CW / 2, y);
+});
+document.title = 'ready';
+</script></body></html>

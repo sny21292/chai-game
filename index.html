@@ -12,7 +12,8 @@
 <title>Floor Pe Dhokha</title>
 <style>
   html, body { margin: 0; height: 100%; background: #1a1324; overflow: hidden; }
-  body { display: flex; align-items: center; justify-content: center; }
+  body { display: flex; align-items: center; justify-content: center;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
   canvas { display: block; touch-action: none; }
   #touch { position: fixed; inset: 0; pointer-events: none; display: none; }
   #touch.on.playing { display: block; }
@@ -36,6 +37,7 @@
 </div>
 <!-- order matters: core helpers, themes, worlds (in play order), platform services, music, then the engine -->
 <script src="js/core.js"></script>
+<script src="js/lang.js"></script>
 <script src="js/backgrounds.js"></script>
 <script src="js/worlds/mumbai.js"></script>
 <script src="js/worlds/delhi.js"></script>

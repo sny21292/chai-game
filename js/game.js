@@ -23,7 +23,7 @@ const QUIPS = [
 // ---------- audio ----------
 let actx = null;
 function audioInit() {
-  if (actx) return;
+  if (actx) { if (actx.state === 'suspended') actx.resume().catch(() => {}); return; }   // iOS suspends audio after a call / backgrounding
   try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; }
 }
 function beep(freq, dur, type = 'square', vol = 0.05, slide = 0) {
@@ -52,11 +52,28 @@ const sfx = {
 // ---------- save ----------
 const SAVE_KEY = 'floorIsLying.v2';   // old name kept on purpose: renaming the key would wipe everyone's progress
 // done: levels cleared per world id, in order (e.g. { mumbai: 4 }). skins: Chotu looks you have unlocked.
-const save = { done: {}, deaths: 0, music: true, sfx: true, vibrate: true, noAds: false, skipped: [], skin: 'glass', skins: ['glass'] };
+// lang: null = automatic (English, or Hinglish for a hi-* portal locale), else 'en' | 'hi' (js/lang.js)
+const save = { done: {}, deaths: 0, music: true, sfx: true, vibrate: true, noAds: false, skipped: [], skin: 'glass', skins: ['glass'], lang: null };
 try { if (typeof localStorage !== 'undefined') Object.assign(save, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) {}
 if ('muted' in save) { if (save.muted) save.music = save.sfx = false; delete save.muted; }   // pre-settings saves
 migrateSave.happened = migrateSave(save);
-function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
+function persist() {
+  const json = JSON.stringify(save);
+  try { localStorage.setItem(SAVE_KEY, json); } catch (e) {}
+  Portal.store(SAVE_KEY, json);    // the portal's cloud save, when there is one
+}
+// The portal's save arrived (after its SDK loaded): keep whichever save has more progress.
+const progressOf = sv => Object.values(sv.done || {}).reduce((a, b) => a + b, 0);
+function portalSave(json) {
+  let remote = null;
+  try { remote = JSON.parse(json); } catch (e) {}
+  if (remote && progressOf(remote) > progressOf(save)) {
+    Object.assign(save, remote);
+    migrateSave(save);
+    if (G.state === 'map' || G.state === 'title') { G.map = null; if (G.state === 'map') openMenu(); }
+  }
+  persist();
+}
 
 // Saves before the India map kept one linear index over 5 worlds of 10 (Mumbai, Delhi, Rajasthan, Kerala, Himalaya).
 // World ids never changed, so that maps straight onto per-world counts. Old Delhi progress has no equivalent
@@ -173,7 +190,7 @@ function nextLevel() {
   if (moreRooms()) {        // through the door into the next room: that's the new checkpoint
     G.room++;
     loadLevel(G.idx, true);
-    say(G.L, `checkpoint! kamra ${G.room + 1}/${LEVELS[G.idx].rooms.length}`, 120);
+    say(G.L, T('checkpoint! kamra {r}/{n}', { r: G.room + 1, n: LEVELS[G.idx].rooms.length }), 120);
     return;
   }
   const wi = LEVELS[G.idx].world, next = G.idx + 1;
@@ -193,12 +210,18 @@ function goToLevel(i) {
 }
 
 // Rewarded ad: watch one, skip the level you're stuck on.
+// Offered only in the pause menu (portals don't allow rewarded-ad buttons on the gameplay screen).
 function skipLevel() {
-  if (G.state !== 'play' || !canOfferSkip()) return;
-  G.paused = true;
+  if (G.state !== 'play' || !G.paused || !canOfferSkip()) return;
   Ads.rewarded('skip_level').then(ok => {
+    if (G.state !== 'play') return;
+    if (!ok) {     // no reward without a finished ad; say why, and the offer disappears if ads are off for good
+      G.paused = false;
+      say(G.L, Ads.blocked ? T('ads abhi band hain') : T('abhi koi ad nahi hai. thodi der baad try karo'), 150);
+      return;
+    }
     G.paused = false;
-    if (!ok || G.state !== 'play') return;
+    const room = !!LEVELS[G.idx].rooms && moreRooms();
     // on a boss, an ad skips the current room, not the whole boss
     const id = levelId(G.idx) + (LEVELS[G.idx].rooms ? `#${G.room + 1}` : '');
     Stats.track('level_skip', { level: levelId(G.idx), room: LEVELS[G.idx].rooms ? G.room + 1 : undefined, deaths: G.levelDeaths });
@@ -206,6 +229,7 @@ function skipLevel() {
     if (!moreRooms()) G.justDone = markDone(G.idx);
     persist();
     nextLevel();
+    if (G.state === 'play') say(G.L, room ? T('kamra skip ho gaya!') : T('level skip ho gaya!'), 150);
   });
 }
 const canOfferSkip = () => Ads.available && G.levelDeaths >= Ads.RULES.offerSkipAfterDeaths;
@@ -406,14 +430,22 @@ function onKey(e) {
   if (Ads.showing || G.state === 'adbreak') return;
   if (c === 'KeyM') { const on = !(save.sfx || save.music); save.sfx = save.music = on; persist(); return; }
   if (c === 'KeyO') return openSettings();
-  if (G.state === 'title') { if (c === 'Enter' || c === 'Space') openMenu(); return; }
+  // Escape is never the only way to do anything: in fullscreen the browser takes it (portal rule)
+  if (G.state === 'title') { if (c === 'Enter' || c === 'Space') playNow(); if (c === 'KeyQ') openMenu(); return; }
   if (G.state === 'map') return mapKey(c);
-  if (G.state === 'worldDone') { if (c === 'Enter' || c === 'Space') worldDoneGo(); if (c === 'Escape') openMenu(); return; }
+  if (G.state === 'worldDone') { if (c === 'Enter' || c === 'Space') worldDoneGo(); if (c === 'Escape' || c === 'KeyQ') openMenu(); return; }
   if (G.state === 'end') { if (c === 'Enter' || c === 'Space') openMenu(); return; }
-  if (c === 'KeyP') G.paused = !G.paused;
+  if (c === 'KeyP' || c === 'Escape') { if (G.state === 'play') G.paused = !G.paused; }
   if (c === 'KeyR') restartLevel();
   if (c === 'KeyK') skipLevel();
-  if (c === 'Escape') quitToMenu();
+  if (c === 'KeyQ' && G.paused) quitToMenu();
+}
+// One tap from the title into gameplay: the next unfinished level (the map is one more tap away).
+function playNow() {
+  const wi = homeWorld();
+  if (WORLDS.every((w, k) => complete(k))) return openMenu();
+  G.sel = nextIn(wi);
+  startAt(G.sel);
 }
 function restartLevel() { if (G.state === 'play' || G.state === 'dead') { G.paused = false; loadLevel(G.idx, true); } }
 function quitToMenu() {
@@ -426,6 +458,7 @@ const SETTINGS = [
   { label: 'Music', key: 'music' },
   { label: 'Sound effects', key: 'sfx' },
   { label: 'Vibration (phone)', key: 'vibrate' },
+  { label: 'Bhasha: {l}', lang: true, act: () => { save.lang = lang() === 'en' ? 'hi' : 'en'; persist(); } },
   { label: 'Chotu', skin: true, act: () => cycleSkin() },
   { label: 'Playtest stats download karo', act: () => downloadStats() },
   { label: 'Progress reset', reset: true, act: () => resetProgress() },
@@ -434,7 +467,7 @@ const SETTINGS = [
 function openSettings() { G.settings = { sel: 0, confirmReset: false }; sfx.click(); }
 function settingsKey(c) {
   const st = G.settings;
-  if (c === 'Escape' || c === 'KeyO') { G.settings = null; return; }
+  if (c === 'Escape' || c === 'KeyO' || c === 'Backspace' || c === 'KeyQ') { G.settings = null; return; }
   if (c === 'ArrowUp' || c === 'KeyW') st.sel = (st.sel + SETTINGS.length - 1) % SETTINGS.length;
   if (c === 'ArrowDown' || c === 'KeyS') st.sel = (st.sel + 1) % SETTINGS.length;
   if (['Enter', 'Space', 'ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD'].includes(c)) activateSetting(st.sel);
@@ -456,11 +489,11 @@ function cycleSkin() {
 }
 function skinLabel() {
   const locked = Object.keys(SKINS).filter(s => !save.skins.includes(s));
-  return `Chotu: ${SKINS[save.skin] || save.skin}` + (locked.length ? `   (${locked.map(s => SKINS[s]).join(', ')} 🔒 boss se)` : '');
+  return T('Chotu: {s}', { s: T(SKINS[save.skin] || save.skin) }) + (locked.length ? '   ' + T('({s} 🔒 boss se)', { s: locked.map(s => T(SKINS[s])).join(', ') }) : '');
 }
 function resetProgress() {
   if (!G.settings.confirmReset) { G.settings.confirmReset = true; return; }
-  Object.assign(save, { done: {}, deaths: 0, skipped: [], skin: 'glass', skins: ['glass'] });
+  Object.assign(save, { done: {}, deaths: 0, skipped: [], skin: 'glass', skins: ['glass'] });   // keeps settings and language
   persist();
   G.settings = null; G.sel = 0; G.map = null; G.state = 'title'; G.paused = false;
 }
@@ -473,7 +506,7 @@ function downloadStats() {
 }
 
 // ---------- rendering ----------
-let cv, ctx;
+let cv, ctx, TOUCH = false;   // TOUCH: a phone/tablet (on-screen buttons instead of keys)
 const bgCache = {};
 function background(id) {
   if (!bgCache[id]) {
@@ -855,7 +888,7 @@ function drawLevel() {
   if (th.live) th.live(ctx, G.frame);
   ctx.save();
   if (G.shake) ctx.translate((Math.random() - 0.5) * G.shake, (Math.random() - 0.5) * G.shake);
-  for (const s of L.signs) pill(s.text, s.x, s.y, 14, pal.text);
+  for (const s of L.signs) pill(T(s.text), s.x, s.y, 14, pal.text);
   for (const z of L.winds) drawWind(z);
   for (const d of L.doors) drawDoor(d);
   for (const sp of L.spikes) drawSpikes(sp);
@@ -877,35 +910,38 @@ function drawLevel() {
   rrect(10, 10, 380, 30, 15); ctx.fill();
   rrect(W - 230, 10, 220, 30, 15); ctx.fill();
   const lv = LEVELS[G.idx];
-  text(lv.rooms ? `BOSS ${lv.name}  ·  kamra ${G.room + 1}/${lv.rooms.length}  ·  ${L.def.name}` : `${wd.name}  ${L.def.num + 1}/${wd.levels.length}  ·  ${L.def.name}`, 26, 26, 14, lv.rooms ? '#ffcf6b' : CREAM, 'left', 700);
-  text(`yahan ☠ ${G.levelDeaths}`, W - 216, 26, 14, DIM, 'left', 700);
-  text(`total ☠ ${save.deaths}`, W - 24, 26, 14, RED, 'right', 800);
+  text(lv.rooms ? T('BOSS {b}  ·  kamra {r}/{n}  ·  {name}', { b: T(lv.name), r: G.room + 1, n: lv.rooms.length, name: T(L.def.name) }) : `${wd.name}  ${L.def.num + 1}/${wd.levels.length}  ·  ${T(L.def.name)}`, 26, 26, 14, lv.rooms ? '#ffcf6b' : CREAM, 'left', 700);
+  text(T('yahan ☠ {n}', { n: G.levelDeaths }), W - 216, 26, 14, DIM, 'left', 700);
+  text(T('total ☠ {n}', { n: save.deaths }), W - 24, 26, 14, RED, 'right', 800);
 
-  if (L.t < 100 && G.state === 'play') {
+  if (L.t < 100 && G.state === 'play' && !G.paused) {
     ctx.globalAlpha = Math.min(1, (100 - L.t) / 30);
-    if (lv.rooms && G.room === 0) { text(`BOSS: ${lv.name}`, W / 2, 130, 46, RED); text(`${wd.name} · ${lv.rooms.length} kamre, har kamre pe checkpoint`, W / 2, 175, 18, CREAM, 'center', 600); }
-    else if (lv.rooms) text(L.def.name, W / 2, 150, 34, CREAM);
-    else if (L.def.num === 0) { text(wd.name, W / 2, 130, 46, '#ffcf6b'); text(wd.tagline, W / 2, 175, 18, CREAM, 'center', 600); }
-    else text(L.def.name, W / 2, 150, 34, CREAM);
+    if (lv.rooms && G.room === 0) { text(T('BOSS: {b}', { b: T(lv.name) }), W / 2, 130, 46, RED); text(T('{w} · {n} kamre, har kamre pe checkpoint', { w: wd.name, n: lv.rooms.length }), W / 2, 175, 18, CREAM, 'center', 600); }
+    else if (lv.rooms) text(T(L.def.name), W / 2, 150, 34, CREAM);
+    else if (L.def.num === 0) { text(wd.name, W / 2, 130, 46, '#ffcf6b'); text(T(wd.tagline), W / 2, 175, 18, CREAM, 'center', 600); }
+    else text(T(L.def.name), W / 2, 150, 34, CREAM);
     ctx.globalAlpha = 1;
   }
-  if (L.msg && G.state !== 'dead') { ctx.globalAlpha = Math.min(1, L.msg.t / 30); pill(L.msg.text, W / 2, 215, 24, '#ffcf6b'); ctx.globalAlpha = 1; }
+  // first level: how to move, in the player's own controls
+  if (G.idx === 0 && G.state === 'play' && !G.paused) pill(TOUCH ? T('◀ ▶ chalo  ·  ▲ koodo') : T('← → chalo  ·  ↑ / SPACE koodo'), W / 2, 75, 16, CREAM);
+  if (L.msg && G.state !== 'dead') { ctx.globalAlpha = Math.min(1, L.msg.t / 30); pill(T(L.msg.text), W / 2, 215, 24, '#ffcf6b'); ctx.globalAlpha = 1; }
   if (G.state === 'dead') {
     ctx.fillStyle = 'rgba(20,12,24,.55)';
     ctx.fillRect(0, H / 2 - 40, W, 80);
-    text(G.quip, W / 2, H / 2, 26, '#ffcf6b');
+    text(T(G.quip), W / 2, H / 2, 26, '#ffcf6b');
   }
-  if (G.state === 'play' && canOfferSkip() && !G.paused) {
-    ctx.fillStyle = 'rgba(20,12,24,.85)'; rrect(W - 230, 48, 220, 30, 15); ctx.fill();
-    ctx.strokeStyle = '#ffcf6b'; ctx.lineWidth = 1.5; ctx.stroke();
-    text('⏭ skip karo (ad dekho)  K', W - 120, 64, 13, '#ffcf6b', 'center', 700);
-    button(W - 230, 48, 220, 30, skipLevel);
-  }
-  if (G.paused && !Ads.busy) {
-    overlay('ruko zara...', '');
-    const rows = [['wapas khelo  (P)', () => { G.paused = false; }], ['restart  (R)', restartLevel], ['settings  (O)', openSettings], ['menu  (ESC)', quitToMenu]];
-    rows.forEach(([label, fn], i) => menuRow(label, W / 2 - 150, 290 + i * 50, 300, i === 0, fn));
-  }
+  // stuck: a hint only (no ad button on the gameplay screen); the skip itself is in the pause menu
+  if (G.state === 'play' && canOfferSkip() && !G.paused) pill(TOUCH ? T('phas gaye? ❚❚ → level skip') : T('phas gaye? pause (P) → level skip'), W - 150, 62, 14, '#ffcf6b');
+  if (G.paused && !Ads.busy) drawPause();
+}
+
+function drawPause() {
+  ctx.fillStyle = 'rgba(20,12,24,.7)'; ctx.fillRect(0, 0, W, H);
+  text(T('ruko zara...'), W / 2, 120, 44, '#ffcf6b');
+  const rows = [[T('wapas khelo  (P)'), () => { G.paused = false; }], [T('restart  (R)'), restartLevel]];
+  if (canOfferSkip()) rows.push([T('⏭ level skip (ad dekho)  (K)'), skipLevel]);
+  rows.push([T('naksha  (Q)'), quitToMenu], [T('settings  (O)'), openSettings]);
+  rows.forEach(([label, fn], i) => menuRow(label, W / 2 - 170, 180 + i * 56, 340, i === 0, fn));
 }
 
 function menuRow(label, x, y, w, hot, fn) {
@@ -919,32 +955,34 @@ function drawSettings() {
   const st = G.settings;
   ctx.fillStyle = 'rgba(20,12,24,.82)'; ctx.fillRect(0, 0, W, H);
   G.buttons = [];   // the panel is modal: nothing underneath is clickable
-  text('settings', W / 2, 52, 34, '#ffcf6b');
+  text(T('settings'), W / 2, 40, 32, '#ffcf6b');
   SETTINGS.forEach((row, i) => {
-    const y = 86 + i * 54, on = i === st.sel;
-    let label = row.label;
-    if (row.key) label += save[row.key] ? '   ON' : '   OFF';
+    const y = 66 + i * 48, on = i === st.sel;
+    let label = T(row.label);
+    if (row.key) label += '   ' + T(save[row.key] ? 'ON' : 'OFF');
+    if (row.lang) label = T(row.label, { l: LANGS[lang()] });
     if (row.skin) label = skinLabel();
-    if (row.reset && st.confirmReset) label = 'pakka? sab progress mit jayega. phir dabao';
+    if (row.reset && st.confirmReset) label = T('pakka? sab progress mit jayega. phir dabao');
     ctx.fillStyle = on ? '#ffcf6b' : 'rgba(251,238,221,.12)';
-    rrect(W / 2 - 230, y, 460, 44, 22); ctx.fill();
-    text(label, W / 2, y + 23, 17, on ? INK : (row.key && !save[row.key] ? DIM : CREAM), 'center', 700);
-    button(W / 2 - 230, y, 460, 44, () => (st.sel === i ? activateSetting(i) : (st.sel = i)));
+    rrect(W / 2 - 250, y, 500, 40, 20); ctx.fill();
+    text(label, W / 2, y + 21, 17, on ? INK : (row.key && !save[row.key] ? DIM : CREAM), 'center', 700);
+    button(W / 2 - 250, y, 500, 40, () => (st.sel === i ? activateSetting(i) : (st.sel = i)));
   });
-  text('↑ ↓ chuno  ·  ENTER badlo  ·  ESC wapas  ·  tap twice to change', W / 2, 482, 13, DIM, 'center', 600);
+  text(T('↑ ↓ chuno  ·  ENTER badlo  ·  O wapas  ·  tap twice to change'), W / 2, 466, 14, DIM, 'center', 600);
   const lv = Stats.data.levels, played = Object.keys(lv).length;
   if (played) {
     const worst = Object.entries(lv).sort((a, b) => b[1].deaths - a[1].deaths)[0];
-    text(`is device pe: ${played} levels khele · sabse zyada ☠ ${worst[0]} (${worst[1].deaths})`, W / 2, 510, 12, DIM, 'center', 600);
+    text(T('is device pe: {n} levels khele · sabse zyada ☠ {l} ({d})', { n: played, l: worst[0], d: worst[1].deaths }), W / 2, 492, 14, DIM, 'center', 600);
   }
+  text(T('naksha: Survey of India (DataMeet, CC BY 2.5 IN)'), W / 2, 518, 14, DIM, 'center', 600);
 }
 
 function drawAd() {
   ctx.fillStyle = 'rgba(10,6,14,.92)'; ctx.fillRect(0, 0, W, H);
   if (Ads.showing) {
-    text(Ads.showing.type === 'rewarded' ? '📺 ad chal raha hai... phir level skip' : '📺 chhota sa break', W / 2, H / 2 - 10, 26, '#ffcf6b');
-    if (Ads.provider === MockAds) text('(mock ad — the real one comes from the ad network)', W / 2, H / 2 + 30, 13, DIM, 'center', 600);
-  } else text('ek second...', W / 2, H / 2, 22, CREAM);
+    text(T(Ads.showing.type === 'rewarded' ? '📺 ad chal raha hai... phir level skip' : '📺 chhota sa break'), W / 2, H / 2 - 10, 26, '#ffcf6b');
+    if (Ads.provider === MockAds) text('(mock ad — the real one comes from the ad network)', W / 2, H / 2 + 30, 14, DIM, 'center', 600);
+  } else text(T('ek second...'), W / 2, H / 2, 22, CREAM);
 }
 
 function gearButton() {
@@ -952,12 +990,6 @@ function gearButton() {
   ctx.beginPath(); ctx.arc(W - 34, 34, 20, 0, Math.PI * 2); ctx.fill();
   text('⚙', W - 34, 35, 22, CREAM);
   button(W - 54, 14, 40, 40, openSettings);
-}
-
-function overlay(title, sub) {
-  ctx.fillStyle = 'rgba(20,12,24,.7)'; ctx.fillRect(0, 0, W, H);
-  text(title, W / 2, H / 2 - 20, 44, '#ffcf6b');
-  text(sub, W / 2, H / 2 + 30, 16, CREAM, 'center', 600);
 }
 
 function button(x, y, w, h, fn) { G.buttons.push({ x, y, w, h, fn }); }
@@ -968,13 +1000,19 @@ function drawTitle() {
   ctx.fillStyle = 'rgba(20,12,24,.45)'; ctx.fillRect(0, 0, W, H);
   const bob = Math.sin(G.frame * 0.05) * 6;
   text('FLOOR PE DHOKHA', W / 2, 120 + bob, 68, '#ffcf6b');
-  text('Chotu ki chai. aapka bharosa. dono girenge.', W / 2, 180, 19, CREAM, 'center', 600);
+  text(T('Chotu ki chai. aapka bharosa. dono girenge.'), W / 2, 180, 19, CREAM, 'center', 600);
   ctx.save(); ctx.translate(W / 2, 330); ctx.scale(3, 3); drawChotu(PW, PH, Math.sin(G.frame * 0.02) > 0 ? 1 : -1, true); ctx.restore();
   ctx.fillStyle = THEMES[WORLDS[wi].theme].pal.block; ctx.fillRect(W / 2 - 90, 330, 180, 14);
-  if (G.frame % 60 < 42) text('ENTER dabao  /  tap karo', W / 2, 400, 22, DOOR);
-  text('← →  chalo   ·   SPACE / ↑  koodo   ·   R  restart   ·   P  pause   ·   O  settings   ·   M  mute', W / 2, 450, 14, DIM, 'center', 600);
-  if (save.deaths) text(`ab tak ☠ ${save.deaths}`, W / 2, 490, 14, RED, 'center', 700);
-  button(0, 0, W, H, openMenu);
+  if (G.frame % 60 < 42) text(T('ENTER dabao  /  tap karo'), W / 2, 392, 24, DOOR);
+  const nx = LEVELS[nextIn(wi)];
+  if (progressOf(save)) text(T('aage: {w} {n}', { w: WORLDS[wi].name, n: `${nx.num + 1} · ${T(nx.name)}` }), W / 2, 424, 15, CREAM, 'center', 600);
+  if (!TOUCH) text(T('← →  chalo   ·   SPACE / ↑  koodo   ·   P  pause   ·   O  settings   ·   M  mute'), W / 2, 460, 14, DIM, 'center', 600);
+  if (save.deaths) text(T('ab tak ☠ {n}', { n: save.deaths }), W / 2, 492, 14, RED, 'center', 700);
+  button(0, 0, W, H, playNow);
+  // the map, one tap away
+  ctx.fillStyle = 'rgba(20,12,24,.7)'; rrect(14, 14, 132, 40, 20); ctx.fill();
+  text(T('🗺  naksha'), 80, 35, 17, CREAM, 'center', 700);
+  button(14, 14, 132, 40, () => openMenu());
   gearButton();
 }
 
@@ -992,25 +1030,25 @@ function drawWorldDone() {
   const prev = WORLDS[G.doneWorld], nx = worldDoneNext(), next = nx >= 0 ? WORLDS[nx] : null;
   ctx.drawImage(background((next || prev).theme), 0, 0, W, H);
   ctx.fillStyle = 'rgba(20,12,24,.62)'; ctx.fillRect(0, 0, W, H);
-  text(prev.kind === 'ut' ? `${prev.name} boss — haraya!` : `${prev.name} — khatam!`, W / 2, 130, 44, DOOR);
+  text(T(prev.kind === 'ut' ? '{w} boss — haraya!' : '{w} — khatam!', { w: prev.name }), W / 2, 130, 44, DOOR);
   let y = 200;
   if (G.newSkin) {
-    text(`inaam mila: ${SKINS[G.newSkin] || G.newSkin} Chotu!`, W / 2, y, 22, '#ffcf6b');
+    text(T('inaam mila: {s} Chotu!', { s: T(SKINS[G.newSkin] || G.newSkin) }), W / 2, y, 22, '#ffcf6b');
     ctx.save(); ctx.translate(W / 2, y + 112); ctx.scale(2.2, 2.2); drawChotu(PW, PH, 1, true, 0.74, G.newSkin); ctx.restore();
-    text('settings mein badal sakte ho', W / 2, y + 134, 13, DIM, 'center', 600);
+    text(T('settings mein badal sakte ho'), W / 2, y + 134, 14, DIM, 'center', 600);
     y += 170;
   }
   // a boss that just became available (only right after the state that opened it)
   const boss = WORLDS.findIndex((w, wi) => w.kind === 'ut' && unlocked(wi) && !complete(wi));
   if (boss >= 0 && G.justDone && G.justDone.states < (WORLDS[boss].unlockAfter ?? 2) && prev.kind !== 'ut') {
-    pill(`naya BOSS khula: ${WORLDS[boss].name} (naksha pe ★)`, W / 2, y, 16, '#ffcf6b'); y += 44;
+    pill(T('naya BOSS khula: {w} (naksha pe ★)', { w: WORLDS[boss].name }), W / 2, y, 16, '#ffcf6b'); y += 44;
   }
   if (next && prev.kind !== 'ut') {
-    text('chai break le lo. agla stop:', W / 2, y + 10, 18, CREAM, 'center', 600);
+    text(T('chai break le lo. agla stop:'), W / 2, y + 10, 18, CREAM, 'center', 600);
     text(next.name, W / 2, y + 56, 40, '#ffcf6b');
-    text(next.tagline, W / 2, y + 98, 16, DIM, 'center', 600);
+    text(T(next.tagline), W / 2, y + 98, 16, DIM, 'center', 600);
   }
-  if (G.frame % 60 < 42) text(next && prev.kind !== 'ut' ? 'ENTER / tap = aage · ESC = naksha' : 'ENTER / tap = naksha', W / 2, 500, 18, DOOR);
+  if (G.frame % 60 < 42) text(T(next && prev.kind !== 'ut' ? 'ENTER / tap = aage · Q = naksha' : 'ENTER / tap = naksha'), W / 2, 500, 18, DOOR);
   button(0, 0, W, H, worldDoneGo);
 }
 
@@ -1018,11 +1056,11 @@ function drawEnd() {
   ctx.drawImage(background(WORLDS[WORLDS.length - 1].theme), 0, 0, W, H);
   ctx.fillStyle = 'rgba(20,12,24,.6)'; ctx.fillRect(0, 0, W, H);
   const secs = Math.round((G.runEnd - G.runStart) / 60);
-  text('CHOTU GHAR PAHUNCH GAYA!', W / 2, 140, 44, DOOR);
-  text('floor ab bhi naraz hai.', W / 2, 190, 18, DIM, 'center', 600);
-  text(`is run mein ☠ ${G.runDeaths}`, W / 2, 260, 24, CREAM);
-  text(`samay: ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`, W / 2, 296, 24, CREAM);
-  text(G.runDeaths < 50 ? 'kya baat hai! ekdum jhakaas' : G.runDeaths < 200 ? 'mehnat ka phal meetha hota hai' : 'himmat ki daad deni padegi', W / 2, 346, 18, '#ffcf6b', 'center', 700);
+  text(T('CHOTU GHAR PAHUNCH GAYA!'), W / 2, 140, 44, DOOR);
+  text(T('floor ab bhi naraz hai.'), W / 2, 190, 18, DIM, 'center', 600);
+  text(T('is run mein ☠ {n}', { n: G.runDeaths }), W / 2, 260, 24, CREAM);
+  text(T('samay: {t}', { t: `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}` }), W / 2, 296, 24, CREAM);
+  text(T(G.runDeaths < 50 ? 'kya baat hai! ekdum jhakaas' : G.runDeaths < 200 ? 'mehnat ka phal meetha hota hai' : 'himmat ki daad deni padegi'), W / 2, 346, 18, '#ffcf6b', 'center', 700);
   ctx.save(); ctx.translate(W / 2, 450); ctx.scale(2.5, 2.5); drawChotu(PW, PH, 1, true); ctx.restore();
   if (G.frame % 60 < 42) text('ENTER / tap', W / 2, 500, 18, DOOR);
   button(0, 0, W, H, openMenu);
@@ -1046,8 +1084,10 @@ function boot() {
   if (migrateSave.happened) persist();
   Stats.load();
   Stats.track('session_start', { level: null, unlocked: Object.values(save.done).reduce((a, b) => a + b, 0) });
+  Portal.onReady = sdk => { setAutoLang(sdk.locale); if (sdk.save != null) portalSave(sdk.save); else persist(); };
   Ads.init();
-  if (location.protocol.startsWith('http') && 'serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  // offline cache for our own site only: portals serve their own copy and don't want a service worker
+  if (location.protocol.startsWith('http') && 'serviceWorker' in navigator && !Portal.wanted()) navigator.serviceWorker.register('sw.js').catch(() => {});
   cv = document.getElementById('c');
   ctx = cv.getContext('2d');
   const resize = () => {
@@ -1069,7 +1109,10 @@ function boot() {
   addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) G.held[k] = false; });
   const releaseAll = () => { G.held.left = G.held.right = G.held.jump = false; };
   addEventListener('blur', () => { releaseAll(); if (G.state === 'play') G.paused = true; });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && G.state === 'play') { releaseAll(); G.paused = true; } });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && G.state === 'play') { releaseAll(); G.paused = true; }
+    if (!document.hidden && actx && actx.state !== 'running') actx.resume().catch(() => {});
+  });
   addEventListener('pagehide', () => { if (G.state === 'play' || G.state === 'dead') Stats.track('level_quit', { level: levelId(G.idx), deaths: G.levelDeaths }); });
 
   const logical = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; };
@@ -1086,13 +1129,14 @@ function boot() {
   cv.addEventListener('pointercancel', e => { const [x, y] = logical(e); mapPointer('cancel', e.pointerId, x, y); });
   cv.addEventListener('wheel', e => { if (G.state !== 'map') return; e.preventDefault(); const [x, y] = logical(e); mapWheel(x, y, e.deltaY); }, { passive: false });
   const touch = document.getElementById('touch');
-  if (matchMedia('(pointer: coarse)').matches) touch.classList.add('on');
+  TOUCH = matchMedia('(pointer: coarse)').matches;
+  if (TOUCH) touch.classList.add('on');
   for (const btn of touch.querySelectorAll('[data-k]')) {
     const k = btn.dataset.k;
     btn.addEventListener('pointerdown', e => { e.preventDefault(); audioInit(); if (!G.paused && !G.settings) press(k); });
     for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) btn.addEventListener(ev, () => { G.held[k] = false; });
   }
-  touch.querySelector('[data-a=pause]').addEventListener('pointerdown', e => { e.preventDefault(); if (G.state === 'play') G.paused = !G.paused; });
+  touch.querySelector('[data-a=pause]').addEventListener('pointerdown', e => { e.preventDefault(); audioInit(); if (G.state === 'play') G.paused = !G.paused; });
 
   let last = performance.now(), acc = 0;
   const STEP = 1000 / 60;
