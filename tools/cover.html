@@ -35,8 +35,11 @@ ctx.restore();
 const t = Math.min(CW * 0.11, CH * 0.13);
 ctx.font = `900 ${t}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
 const lines = CW / CH < 1.2 ? ['FLOOR PE', 'DHOKHA'] : ['FLOOR PE DHOKHA'];
+// keep the top-left label zone (CrazyGames "New"/"Hot" badges) clear: roughly 40% x 20% landscape,
+// 40% x 10% portrait, 35% x 30% square
+const y0 = CW / CH > 1.2 ? 0.30 : CW / CH < 0.9 ? 0.16 : 0.37;
 lines.forEach((l, i) => {
-  const y = CH * (lines.length > 1 ? 0.16 : 0.2) + i * t * 1.05;
+  const y = CH * y0 + i * t * 1.05;
   ctx.lineWidth = t * 0.12; ctx.strokeStyle = '#1a1324'; ctx.lineJoin = 'round'; ctx.strokeText(l, CW / 2, y);
   ctx.fillStyle = '#ffcf6b'; ctx.fillText(l, CW / 2, y);
 });
